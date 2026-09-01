@@ -1,0 +1,107 @@
+export type TripStatus =
+  | "draft"
+  | "planning"
+  | "itinerary_locked"
+  | "booking_in_progress"
+  | "booked"
+  | "cancelled";
+
+export type Trip = {
+  id: string;
+  title: string | null;
+  origin_query: string | null;
+  destination_query: string;
+  needs_flight: boolean;
+  budget_vnd: number;
+  start_date: string;
+  end_date: string;
+  status: TripStatus;
+};
+
+export type TripStop = {
+  id: string;
+  sequence: number;
+  place_name: string;
+  latitude: number | null;
+  longitude: number | null;
+  planned_date: string | null;
+  expected_duration_hours: number | null;
+};
+
+export type TripFlightOption = {
+  id: string;
+  direction: "departure" | "return";
+  carrier_name: string;
+  flight_number: string;
+  departure_time: string;
+  arrival_time: string;
+  price_vnd: number;
+  traveloka_itinerary_id: string | null;
+  selected: boolean;
+};
+
+export type TripAccommodationOption = {
+  id: string;
+  trip_stop_id: string;
+  source: "brave_search" | "agoda";
+  name: string;
+  description: string | null;
+  price_vnd_per_night: number | null;
+  url: string | null;
+  selected: boolean;
+};
+
+export type TripVehicleAssignment = {
+  id: string;
+  vehicle_id: string;
+  estimated_daily_rate_vnd: number;
+  estimated_total_km: number | null;
+  estimated_extra_km_charge_vnd: number;
+  approved: boolean;
+  arion_booking_id: string | null;
+};
+
+export type TripBookingKind = "vehicle" | "accommodation" | "flight";
+export type TripBookingStatus = "pending_approval" | "approved" | "booking" | "booked" | "failed" | "rejected";
+
+export type TripBooking = {
+  id: string;
+  kind: TripBookingKind;
+  status: TripBookingStatus;
+  trip_flight_option_id: string | null;
+  trip_accommodation_option_id: string | null;
+  trip_vehicle_assignment_id: string | null;
+  external_reference: string | null;
+};
+
+export type TripDisruption = {
+  id: string;
+  trip_booking_id: string;
+  type: "flight_delay" | "flight_cancelled" | "accommodation_cancelled" | "vehicle_unavailable";
+  detail: Record<string, unknown>;
+  occurred_at: string;
+  acknowledged_at: string | null;
+};
+
+export type TripResource = {
+  trip: Trip;
+  stops: TripStop[];
+  flightOptions: TripFlightOption[];
+  accommodationOptions: TripAccommodationOption[];
+  vehicleAssignment: TripVehicleAssignment | null;
+  route: { distanceKm: number; durationMinutes: number; geometry: Array<[number, number]> } | null;
+  budget: { totalVnd: number; usedVnd: number; remainingVnd: number };
+};
+
+export type FleetVehicle = {
+  id: string;
+  license_plate: string;
+  make: string;
+  model: string;
+  daily_rate_vnd: number;
+  free_km_per_day: number;
+  extra_km_rate_vnd: number;
+  current_location: string | null;
+};
+
+export type ChatMessage = { role: "user" | "assistant"; text: string };

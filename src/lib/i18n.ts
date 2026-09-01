@@ -1,0 +1,54 @@
+export type Locale = "en" | "vi";
+
+export const STRINGS: Record<Locale, Record<string, string>> = {
+  en: {
+    appName: "Trip planner",
+    newTrip: "New trip",
+    destination: "Destination",
+    origin: "Origin (optional)",
+    budget: "Budget (VND)",
+    startDate: "Start date",
+    days: "Days",
+    createTrip: "Create trip",
+    budgetUsed: "Budget used",
+    timeline: "Timeline",
+    map: "Map",
+    chat: "Trip assistant",
+    chatPlaceholder: "message the assistant...",
+    send: "Send",
+    approve: "Approve",
+    reject: "Reject",
+    pendingApproval: "Pending approval",
+    booked: "Booked",
+    rejected: "Rejected",
+    failed: "Failed",
+    noTripYet: "Start by telling the assistant your destination, budget, and dates.",
+  },
+  vi: {
+    appName: "Trip planner",
+    newTrip: "Chuyến đi mới",
+    destination: "Điểm đến",
+    origin: "Điểm xuất phát (tuỳ chọn)",
+    budget: "Ngân sách (VND)",
+    startDate: "Ngày bắt đầu",
+    days: "Số ngày",
+    createTrip: "Tạo chuyến đi",
+    budgetUsed: "Ngân sách đã dùng",
+    timeline: "Timeline",
+    map: "Bản đồ",
+    chat: "Trợ lý hành trình",
+    chatPlaceholder: "nhắn với trợ lý...",
+    send: "Gửi",
+    approve: "Duyệt",
+    reject: "Từ chối",
+    pendingApproval: "Chờ duyệt",
+    booked: "Đã đặt",
+    rejected: "Đã từ chối",
+    failed: "Thất bại",
+    noTripYet: "Bắt đầu bằng cách nói với trợ lý điểm đến, ngân sách và ngày đi.",
+  },
+};
+
+export function t(locale: Locale, key: keyof typeof STRINGS.en): string {
+  return STRINGS[locale][key] ?? STRINGS.en[key];
+}

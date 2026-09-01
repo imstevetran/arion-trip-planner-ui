@@ -152,7 +152,12 @@ const TOOL_DEFINITIONS: Array<{
 // same effect, no extra indirection for our own bundled UI.
 export async function callTool<T = unknown>(name: string, input: Record<string, unknown> = {}): Promise<T> {
   const tripId = name === "createTrip" ? null : getCurrentTripId();
-  return apiPost<T>(`/tools/${name}/execute`, { tripId, input, locale: getCurrentLocale() });
+  const { result } = await apiPost<{ result: T }>(`/tools/${name}/execute`, {
+    tripId,
+    input,
+    locale: getCurrentLocale(),
+  });
+  return result;
 }
 
 export function registerAllTools(onToolExecuted?: (name: string, result: unknown) => void): void {

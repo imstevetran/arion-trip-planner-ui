@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { registerAllTools } from "./lib/webmcp/tools";
+import { callTool, registerAllTools } from "./lib/webmcp/tools";
 import { registerAllResources } from "./lib/webmcp/resources";
 import { setCurrentLocale, setCurrentTripId } from "./lib/webmcp/state";
 import { apiGet } from "./lib/api";
@@ -9,6 +9,7 @@ import { CreateTripEntry } from "./components/CreateTripEntry";
 import { Timeline } from "./components/Timeline";
 import { ChatPanel } from "./components/ChatPanel";
 import { RouteMap } from "./components/RouteMap";
+import { PlanOptions } from "./components/PlanOptions";
 
 const TRIP_ID_STORAGE_KEY = "arion-trip-planner:tripId";
 const LOCALE_STORAGE_KEY = "arion-trip-planner:locale";
@@ -22,6 +23,20 @@ export default function App() {
   const [bookings, setBookings] = useState<TripBooking[]>([]);
   const [disruptions, setDisruptions] = useState<TripDisruption[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
+  const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<"plan" | "map">("plan");
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const [desktopPlanOpen, setDesktopPlanOpen] = useState(true);
+
+  function leaveCurrentTrip() {
+    localStorage.removeItem(TRIP_ID_STORAGE_KEY);
+    setTripId(null);
+    setTrip(null);
+    setBookings([]);
+    setDisruptions([]);
+    setAssistantMessage(null);
+    setMobileChatOpen(false);
+  }
 
   // Registered once, module-scoped guard so React StrictMode's double-invoke
   // in dev doesn't register every tool twice.
@@ -67,6 +82,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [tripId, refresh]);
 
+  // Google redirects back here after consent. Complete the original request
+  // automatically so the person lands on the synced result.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("calendar") !== "connected" || params.get("tripId") !== tripId) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    void callTool("addPlanToGoogleCalendar").then(() => refresh());
+  }, [tripId, refresh]);
+
   useEffect(() => {
     apiGet<{ vehicles: FleetVehicle[] }>("/resources/fleet")
       .then((data) => setFleet(data.vehicles))
@@ -74,27 +98,48 @@ export default function App() {
   }, []);
 
   if (!tripId) {
-    return <CreateTripEntry locale={locale} onLocaleChange={setLocale} onCreated={setTripId} />;
+    return <CreateTripEntry locale={locale} onLocaleChange={setLocale} onCreated={(id, message) => {
+      setTripId(id);
+      setAssistantMessage(message ?? null);
+    }} />;
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell mobile-${mobileView}${mobileChatOpen ? " mobile-chat-open" : ""}${desktopPlanOpen ? "" : " plan-collapsed"}`}>
+      <div className="mobile-nav" aria-label="Trip view">
+        <button type="button" className={mobileView === "plan" ? "active" : ""} onClick={() => setMobileView("plan")}>Plan</button>
+        <button type="button" className={mobileView === "map" ? "active" : ""} onClick={() => setMobileView("map")}>Map</button>
+        <button type="button" className="mobile-chat-trigger" onClick={() => setMobileChatOpen(true)}>Ask agent</button>
+      </div>
       <div className="map-column">
         <RouteMap trip={trip} locale={locale} />
+        <button type="button" className="desktop-plan-toggle" onClick={() => setDesktopPlanOpen((open) => !open)}>
+          {desktopPlanOpen ? "Hide plan" : "Show plan"}
+        </button>
       </div>
       {trip ? (
-        <Timeline trip={trip} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} />
+        <div className="app-main">
+          {trip.trip.status === "draft" || trip.trip.status === "planning" ? <PlanOptions locale={locale} onChoose={setAssistantMessage} /> : null}
+          <Timeline trip={trip} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={setAssistantMessage} embedded />
+        </div>
       ) : (
         <div className="app-main">
           <p className="empty-hint">Loading…</p>
         </div>
       )}
-      <ChatPanel
-        tripId={tripId}
-        locale={locale}
-        onTripIdChange={setTripId}
-        onToolCallsExecuted={() => void refresh()}
-      />
+      <div className="chat-column">
+        <button type="button" className="mobile-chat-close" onClick={() => setMobileChatOpen(false)}>Close</button>
+        <ChatPanel
+          tripId={tripId}
+          locale={locale}
+          onTripIdChange={setTripId}
+          onToolCallsExecuted={() => void refresh()}
+          externalMessage={assistantMessage}
+          onExternalMessageSent={() => setAssistantMessage(null)}
+          onStartNewTrip={leaveCurrentTrip}
+          onCloseTrip={leaveCurrentTrip}
+        />
+      </div>
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function CreateTripEntry({
 }: {
   locale: Locale;
   onLocaleChange: (locale: Locale) => void;
-  onCreated: (tripId: string) => void;
+  onCreated: (tripId: string, initialMessage?: string) => void;
 }) {
   const [mode, setMode] = useState<CreationMode>("form");
   const [formPrefill, setFormPrefill] = useState<TripSuggestion | null>(null);
@@ -76,7 +76,7 @@ export function CreateTripEntry({
           locale={locale}
           prefill={formPrefill}
           getTurnstileToken={getTurnstileToken}
-          onCreated={(trip) => onCreated(trip.id)}
+          onCreated={(trip, initialMessage) => onCreated(trip.id, initialMessage)}
         />
       ) : (
         <div className="create-trip-chat-body">

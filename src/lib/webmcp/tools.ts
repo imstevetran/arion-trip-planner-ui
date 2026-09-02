@@ -130,6 +130,11 @@ const TOOL_DEFINITIONS: Array<{
     description: "Mark a disruption alert as seen.",
     inputSchema: { type: "object", properties: { disruptionId: { type: "string" } }, required: ["disruptionId"] },
   },
+  {
+    name: "addPlanToGoogleCalendar",
+    description: "Add every dated stop and selected flight from the locked trip to Google Calendar after the user explicitly asks.",
+    inputSchema: { type: "object", properties: {} },
+  },
   // Human-gated: registered as real WebMCP tools (so the Approve/Reject
   // buttons — and any future external agent acting on an explicit human
   // instruction — can call them the standard way), but never exposed to

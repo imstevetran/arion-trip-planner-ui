@@ -96,6 +96,12 @@ export type TripResource = {
   flightOptions: TripFlightOption[];
   accommodationOptions: TripAccommodationOption[];
   vehicleAssignment: TripVehicleAssignment | null;
+  calendar: {
+    provider: "google";
+    syncedEventCount: number;
+    lastSyncedAt: string | null;
+    calendarUrl: string;
+  } | null;
   route: {
     distanceKm: number;
     durationMinutes: number;
@@ -122,4 +128,10 @@ export type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   suggestedActions?: SuggestedAction[];
+  calendarSync?: {
+    status: "authorization_required" | "synced";
+    syncedEventCount: number;
+    authorizationUrl?: string;
+    calendarUrl?: string;
+  };
 };

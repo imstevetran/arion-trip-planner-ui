@@ -31,6 +31,16 @@ function FitBounds({ points }: { points: Array<[number, number]> }) {
   return null;
 }
 
+function ResizeMap() {
+  const map = useMap();
+  useEffect(() => {
+    const observer = new ResizeObserver(() => map.invalidateSize({ animate: false }));
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
 // Default view when there are no geocoded stops yet (centered on Vietnam) —
 // keeps a live, pannable map on screen at all times instead of swapping in a
 // text placeholder, which read as "the map is broken" rather than "no route
@@ -61,6 +71,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
         scrollWheelZoom
         zoomControl={false}
       >
+        <ResizeMap />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"

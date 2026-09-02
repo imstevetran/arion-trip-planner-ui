@@ -10,6 +10,7 @@ type ChatTurnResponse = {
   tripId: string | null;
   toolCalls: string[];
   suggestedActions?: SuggestedAction[];
+  calendarSync?: ChatMessage["calendarSync"];
 };
 
 // Keyed by message index — ephemeral, per-render-only UI state for the
@@ -75,6 +76,8 @@ export function ChatPanel({
   onToolCallsExecuted,
   externalMessage,
   onExternalMessageSent,
+  onStartNewTrip,
+  onCloseTrip,
   getTurnstileToken,
 }: {
   tripId: string | null;
@@ -86,6 +89,8 @@ export function ChatPanel({
   // and pressed send themselves.
   externalMessage?: string | null;
   onExternalMessageSent?: () => void;
+  onStartNewTrip?: () => void;
+  onCloseTrip?: () => void;
   // Only provided (and only needed) pre-trip — see CreateTripEntry. Once a
   // trip exists, this panel is a different mounted instance entirely (the
   // app shell's, in App.tsx) and every message already carries a real
@@ -173,7 +178,7 @@ export function ChatPanel({
       });
       setMessages((current) => [
         ...current,
-        { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions },
+        { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions, calendarSync: result.calendarSync },
       ]);
       lastHistoryLength.current += 2;
       if (result.tripId && result.tripId !== tripId) onTripIdChange(result.tripId);
@@ -216,6 +221,12 @@ export function ChatPanel({
     <div className="chat-panel">
       <div className="chat-head">
         <h3>{t(locale, "chat")}</h3>
+        {(onStartNewTrip || onCloseTrip) && (
+          <div className="chat-trip-actions">
+            {onStartNewTrip && <button type="button" onClick={onStartNewTrip}>{locale === "vi" ? "Chuyến mới" : "New trip"}</button>}
+            {onCloseTrip && <button type="button" className="close-trip" aria-label={locale === "vi" ? "Đóng chuyến hiện tại" : "Close current trip"} onClick={onCloseTrip}>×</button>}
+          </div>
+        )}
       </div>
       <div className="chat-scroll" ref={scrollRef}>
         {messages.length === 0 && <p className="empty-hint">{t(locale, "noTripYet")}</p>}
@@ -233,6 +244,16 @@ export function ChatPanel({
                 onCancel={() => dismissActions(index)}
                 locale={locale}
               />
+            )}
+            {message.role === "assistant" && message.calendarSync?.status === "authorization_required" && message.calendarSync.authorizationUrl && (
+              <a className="calendar-chat-link" href={message.calendarSync.authorizationUrl}>
+                {locale === "vi" ? "Ket noi Google Calendar" : "Connect Google Calendar"}
+              </a>
+            )}
+            {message.role === "assistant" && message.calendarSync?.status === "synced" && message.calendarSync.calendarUrl && (
+              <a className="calendar-chat-link" href={message.calendarSync.calendarUrl} target="_blank" rel="noreferrer">
+                {message.calendarSync.syncedEventCount} {locale === "vi" ? "events da dong bo" : "events synced"} ↗
+              </a>
             )}
           </div>
         ))}

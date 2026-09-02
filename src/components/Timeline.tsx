@@ -2,6 +2,8 @@ import { useState } from "react";
 import { callTool } from "../lib/webmcp/tools";
 import { t, type Locale } from "../lib/i18n";
 import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
+import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
+import { CalendarExportButton } from "./CalendarExportButton";
 import type {
   FleetVehicle,
   TripAccommodationOption,
@@ -129,6 +131,8 @@ export function Timeline({
   fleet,
   locale,
   onChanged,
+  embedded = false,
+  onAskAssistant,
 }: {
   trip: TripResource;
   bookings: TripBooking[];
@@ -136,6 +140,8 @@ export function Timeline({
   fleet: FleetVehicle[];
   locale: Locale;
   onChanged: () => void;
+  embedded?: boolean;
+  onAskAssistant: (message: string) => void;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
@@ -147,7 +153,7 @@ export function Timeline({
   }, {});
 
   return (
-    <div className="app-main">
+    <div className={embedded ? "timeline-main" : "app-main"}>
       <div className="app-topbar">
         <div>
           <p className="trip-title">{trip.trip.destination_query}</p>
@@ -155,13 +161,16 @@ export function Timeline({
             {trip.trip.start_date} – {trip.trip.end_date} · {trip.trip.status}
           </p>
         </div>
-        <div className="budget-block">
+        <div className="topbar-actions">
+          {trip.trip.status !== "draft" && trip.trip.status !== "planning" && <CalendarExportButton trip={trip} locale={locale} />}
+          <div className="budget-block">
           <div className="budget-label">{t(locale, "budgetUsed")}</div>
           <div className="budget-figs mono">
             {formatVnd(trip.budget.usedVnd)} / {formatVnd(trip.budget.totalVnd)}
           </div>
           <div className="budget-bar">
             <i style={{ width: `${Math.min(100, (trip.budget.usedVnd / Math.max(1, trip.budget.totalVnd)) * 100)}%` }} />
+          </div>
           </div>
         </div>
       </div>
@@ -174,6 +183,12 @@ export function Timeline({
           </span>
         </div>
       )}
+
+      <div className="trip-review-grid">
+        <FeasibilityReview trip={trip} locale={locale} onAskAssistant={onAskAssistant} />
+        <CostBreakdown trip={trip} locale={locale} onAskAssistant={onAskAssistant} />
+      </div>
+      <BookingReview trip={trip} bookings={bookings} locale={locale} onChanged={onChanged} />
 
       <div className="timeline-scroll">
         {trip.trip.needs_flight && selectedFlights.length > 0 && (

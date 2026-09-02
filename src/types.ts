@@ -83,13 +83,25 @@ export type TripDisruption = {
   acknowledged_at: string | null;
 };
 
+export type TripRouteLeg = {
+  fromStopId: string;
+  toStopId: string;
+  distanceKm: number;
+  durationMinutes: number;
+};
+
 export type TripResource = {
   trip: Trip;
   stops: TripStop[];
   flightOptions: TripFlightOption[];
   accommodationOptions: TripAccommodationOption[];
   vehicleAssignment: TripVehicleAssignment | null;
-  route: { distanceKm: number; durationMinutes: number; geometry: Array<[number, number]> } | null;
+  route: {
+    distanceKm: number;
+    durationMinutes: number;
+    geometry: Array<[number, number]>;
+    legs: TripRouteLeg[];
+  } | null;
   budget: { totalVnd: number; usedVnd: number; remainingVnd: number };
 };
 
@@ -104,4 +116,10 @@ export type FleetVehicle = {
   current_location: string | null;
 };
 
-export type ChatMessage = { role: "user" | "assistant"; text: string };
+export type SuggestedAction = { label: string; description?: string };
+
+export type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  suggestedActions?: SuggestedAction[];
+};

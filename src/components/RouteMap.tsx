@@ -31,6 +31,14 @@ function FitBounds({ points }: { points: Array<[number, number]> }) {
   return null;
 }
 
+// Default view when there are no geocoded stops yet (centered on Vietnam) —
+// keeps a live, pannable map on screen at all times instead of swapping in a
+// text placeholder, which read as "the map is broken" rather than "no route
+// yet" (confirmed live: a customer testing a fresh trip expected the map to
+// already be there, not appear only once stops are geocoded).
+const DEFAULT_CENTER: [number, number] = [16.05, 108.2];
+const DEFAULT_ZOOM = 5;
+
 export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: Locale }) {
   const stopPoints = useMemo<Array<[number, number]>>(
     () =>
@@ -45,21 +53,25 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
     [trip],
   );
 
-  if (stopPoints.length === 0) {
-    return <p className="map-empty">{t(locale, "noTripYet")}</p>;
-  }
-
   return (
-    <MapContainer center={stopPoints[0]} zoom={11} scrollWheelZoom zoomControl={false}>
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution="&copy; OpenStreetMap contributors"
-      />
-      {routeLine.length > 1 && <Polyline positions={routeLine} pathOptions={{ color: "#e4ad63", weight: 3, dashArray: "1 8" }} />}
-      {stopPoints.map((point, index) => (
-        <Marker key={index} position={point} icon={markerIcon} />
-      ))}
-      <FitBounds points={stopPoints} />
-    </MapContainer>
+    <div className="map-shell">
+      <MapContainer
+        center={stopPoints[0] ?? DEFAULT_CENTER}
+        zoom={stopPoints[0] ? 11 : DEFAULT_ZOOM}
+        scrollWheelZoom
+        zoomControl={false}
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution="&copy; OpenStreetMap contributors"
+        />
+        {routeLine.length > 1 && <Polyline positions={routeLine} pathOptions={{ color: "#e4ad63", weight: 3, dashArray: "1 8" }} />}
+        {stopPoints.map((point, index) => (
+          <Marker key={index} position={point} icon={markerIcon} />
+        ))}
+        {stopPoints.length > 0 && <FitBounds points={stopPoints} />}
+      </MapContainer>
+      {stopPoints.length === 0 && <p className="map-empty">{t(locale, "mapEmpty")}</p>}
+    </div>
   );
 }

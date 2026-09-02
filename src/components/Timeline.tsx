@@ -9,10 +9,33 @@ import type {
   TripDisruption,
   TripFlightOption,
   TripResource,
+  TripRouteLeg,
 } from "../types";
 
 function formatVnd(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(amount) + " ₫";
+}
+
+function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return hours > 0 ? `${hours}h${mins ? ` ${mins}m` : ""}` : `${mins}m`;
+}
+
+// One row per stop showing how the customer gets there from the previous
+// stop — self-drive only (this product doesn't have a per-leg vehicle yet,
+// just the eventual whole-trip assignment), so "Drive" plus ORS's estimated
+// distance/duration for that specific leg (route.legs from trip://current,
+// see trip-planner-api's routes/resources.ts).
+function TravelLeg({ leg, locale }: { leg: TripRouteLeg; locale: Locale }) {
+  return (
+    <div className="travel-leg">
+      <CarIcon />
+      <span>
+        {t(locale, "drive")} · {leg.distanceKm} km · {formatDuration(leg.durationMinutes)}
+      </span>
+    </div>
+  );
 }
 
 function bookingFor(bookings: TripBooking[], key: keyof TripBooking, id: string): TripBooking | undefined {
@@ -183,25 +206,31 @@ export function Timeline({
         {Object.entries(days).map(([date, stops]) => (
           <div className="day-group" key={date}>
             <div className="day-label">{date === "unscheduled" ? "—" : date}</div>
-            {stops.map((stop) => (
-              <div className="stop-card" key={stop.id}>
-                <div className="stop-icon">
-                  <MapPinIcon />
-                </div>
-                <div className="stop-body">
-                  <div className="stop-top">
-                    <span className="stop-name">{stop.place_name}</span>
-                    {stop.expected_duration_hours && <span className="mono stop-meta">{stop.expected_duration_hours}h</span>}
+            {stops.map((stop) => {
+              const leg = trip.route?.legs.find((candidate) => candidate.toStopId === stop.id);
+              return (
+                <div key={stop.id}>
+                  {leg && <TravelLeg leg={leg} locale={locale} />}
+                  <div className="stop-card">
+                    <div className="stop-icon">
+                      <MapPinIcon />
+                    </div>
+                    <div className="stop-body">
+                      <div className="stop-top">
+                        <span className="stop-name">{stop.place_name}</span>
+                        {stop.expected_duration_hours && <span className="mono stop-meta">{stop.expected_duration_hours}h</span>}
+                      </div>
+                      <AccommodationOptions
+                        options={trip.accommodationOptions.filter((option) => option.trip_stop_id === stop.id)}
+                        locale={locale}
+                        bookings={bookings}
+                        onChanged={onChanged}
+                      />
+                    </div>
                   </div>
-                  <AccommodationOptions
-                    options={trip.accommodationOptions.filter((option) => option.trip_stop_id === stop.id)}
-                    locale={locale}
-                    bookings={bookings}
-                    onChanged={onChanged}
-                  />
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
 

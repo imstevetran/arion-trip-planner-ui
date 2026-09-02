@@ -26,6 +26,12 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     modeForm: "Form",
     modeChat: "Chat",
     trending: "Trending",
+    mapEmpty: "The map will fill in once the assistant has drafted a route.",
+    thinking: "Thinking…",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    drive: "Drive",
+    actionsConfirmedPrefix: "Yes, please go ahead with: ",
   },
   vi: {
     appName: "Trip planner",
@@ -52,6 +58,12 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     modeForm: "Biểu mẫu",
     modeChat: "Trò chuyện",
     trending: "Xu hướng",
+    mapEmpty: "Bản đồ sẽ hiện ra khi trợ lý đã phác thảo lộ trình.",
+    thinking: "Đang xử lý…",
+    confirm: "Xác nhận",
+    cancel: "Huỷ",
+    drive: "Lái xe",
+    actionsConfirmedPrefix: "Vâng, giúp tôi: ",
   },
 };
 

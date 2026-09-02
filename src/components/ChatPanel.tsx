@@ -75,6 +75,7 @@ export function ChatPanel({
   onToolCallsExecuted,
   externalMessage,
   onExternalMessageSent,
+  getTurnstileToken,
 }: {
   tripId: string | null;
   locale: Locale;
@@ -85,6 +86,11 @@ export function ChatPanel({
   // and pressed send themselves.
   externalMessage?: string | null;
   onExternalMessageSent?: () => void;
+  // Only provided (and only needed) pre-trip — see CreateTripEntry. Once a
+  // trip exists, this panel is a different mounted instance entirely (the
+  // app shell's, in App.tsx) and every message already carries a real
+  // tripId, so there's nothing here for Turnstile to gate.
+  getTurnstileToken?: () => Promise<string>;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -154,7 +160,17 @@ export function ChatPanel({
     setMessages((current) => [...current, { role: "user", text }]);
     setBusy(true);
     try {
-      const result = await apiPost<ChatTurnResponse>("/chat", { tripId, message: text, locale });
+      // Every message before a trip exists is a potential createTrip call —
+      // the model decides which one actually triggers it, so this can't be
+      // narrowed to just the triggering turn. See trip-planner-api's
+      // routes/chat.ts.
+      const turnstileToken = !tripId ? await getTurnstileToken?.() : undefined;
+      const result = await apiPost<ChatTurnResponse>("/chat", {
+        tripId,
+        message: text,
+        locale,
+        ...(turnstileToken ? { turnstileToken } : {}),
+      });
       setMessages((current) => [
         ...current,
         { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions },

@@ -57,6 +57,11 @@ a { color: var(--primary); }
   gap: 18px;
 }
 .create-trip.chat-mode { max-width: 520px; padding: 0; overflow: hidden; }
+/* Managed-mode Turnstile is invisible almost all the time — this just
+   keeps the occasional interactive challenge from butting against the
+   card's edge/padding when it does appear. */
+.turnstile-widget:not(:empty) { display: flex; justify-content: center; padding: 4px 16px 16px; }
+.create-trip.chat-mode .turnstile-widget:not(:empty) { padding: 4px 24px 20px; }
 .create-trip-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .create-trip.chat-mode .create-trip-head { padding: 20px 24px 0; }
 .create-trip-body { display: flex; flex-direction: column; gap: 14px; }

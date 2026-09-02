@@ -8,10 +8,12 @@ import type { Trip } from "../types";
 export function CreateTripForm({
   locale,
   prefill,
+  getTurnstileToken,
   onCreated,
 }: {
   locale: Locale;
   prefill?: TripSuggestion | null;
+  getTurnstileToken: () => Promise<string>;
   onCreated: (trip: Trip, initialMessage: string) => void;
 }) {
   const [destination, setDestination] = useState("");
@@ -42,13 +44,18 @@ export function CreateTripForm({
     setBusy(true);
     setError(null);
     try {
-      const trip = await callTool<Trip>("createTrip", {
-        destination: destination.trim(),
-        origin: origin.trim() || undefined,
-        budgetVnd: Number(budgetVnd),
-        startDate,
-        days: Number(days),
-      });
+      const turnstileToken = await getTurnstileToken();
+      const trip = await callTool<Trip>(
+        "createTrip",
+        {
+          destination: destination.trim(),
+          origin: origin.trim() || undefined,
+          budgetVnd: Number(budgetVnd),
+          startDate,
+          days: Number(days),
+        },
+        turnstileToken,
+      );
       onCreated(trip, preferenceBrief({ party, pace }, locale));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

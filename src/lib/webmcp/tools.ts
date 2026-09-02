@@ -150,12 +150,24 @@ const TOOL_DEFINITIONS: Array<{
 // and by UI event handlers (Approve/Reject buttons etc.) that want to call
 // a tool directly without going through document.modelContext.getTools() —
 // same effect, no extra indirection for our own bundled UI.
-export async function callTool<T = unknown>(name: string, input: Record<string, unknown> = {}): Promise<T> {
+// turnstileToken is required server-side for createTrip specifically (bot
+// protection on the one entry point that mass-creates trips — see
+// trip-planner-api's routes/tools.ts) and ignored for every other tool.
+// Callers other than our own UI (an external WebMCP client driving
+// document.modelContext, say) won't have one, so their createTrip calls get
+// a 403 — intended, not a bug: that's exactly the class of caller this is
+// meant to stop.
+export async function callTool<T = unknown>(
+  name: string,
+  input: Record<string, unknown> = {},
+  turnstileToken?: string,
+): Promise<T> {
   const tripId = name === "createTrip" ? null : getCurrentTripId();
   const { result } = await apiPost<{ result: T }>(`/tools/${name}/execute`, {
     tripId,
     input,
     locale: getCurrentLocale(),
+    ...(turnstileToken ? { turnstileToken } : {}),
   });
   return result;
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { t, type Locale } from "../lib/i18n";
 import { suggestionLabel, suggestionToChatMessage, TRIP_SUGGESTIONS, type TripSuggestion } from "../lib/tripSuggestions";
+import { useTurnstileToken } from "../lib/turnstile";
 import { CreateTripForm } from "./CreateTripForm";
 import { ChatPanel } from "./ChatPanel";
 
@@ -27,6 +28,10 @@ export function CreateTripEntry({
   const [mode, setMode] = useState<CreationMode>("form");
   const [formPrefill, setFormPrefill] = useState<TripSuggestion | null>(null);
   const [chatMessage, setChatMessage] = useState<string | null>(null);
+  // One shared widget for this whole screen (not one per mode) — createTrip
+  // is the single action being gated here, regardless of which mode the
+  // customer used to trigger it. See lib/turnstile.ts.
+  const { containerRef: turnstileRef, getToken: getTurnstileToken } = useTurnstileToken("create-trip");
 
   function applySuggestion(suggestion: TripSuggestion) {
     if (mode === "form") {
@@ -67,7 +72,12 @@ export function CreateTripEntry({
       </div>
 
       {mode === "form" ? (
-        <CreateTripForm locale={locale} prefill={formPrefill} onCreated={(trip, initialMessage) => onCreated(trip.id, initialMessage)} />
+        <CreateTripForm
+          locale={locale}
+          prefill={formPrefill}
+          getTurnstileToken={getTurnstileToken}
+          onCreated={(trip, initialMessage) => onCreated(trip.id, initialMessage)}
+        />
       ) : (
         <div className="create-trip-chat-body">
           <ChatPanel
@@ -77,9 +87,13 @@ export function CreateTripEntry({
             onToolCallsExecuted={() => {}}
             externalMessage={chatMessage}
             onExternalMessageSent={() => setChatMessage(null)}
+            getTurnstileToken={getTurnstileToken}
           />
         </div>
       )}
+      {/* Managed mode: normally invisible, occasionally shows an interactive
+          checkbox here if Cloudflare's risk engine wants one. */}
+      <div ref={turnstileRef} className="turnstile-widget" />
     </div>
   );
 }

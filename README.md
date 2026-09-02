@@ -45,6 +45,25 @@ anything beyond render the empty "new trip" form — see that service's own
 README for what it needs configured (Supabase, Anthropic, OpenRouteService,
 Brave Search, and the two booking mocks).
 
+### Google Calendar sync
+
+Once an itinerary is locked, the assistant can handle **“Add my locked plan
+to Google Calendar.”** On first use it returns a Google consent button; after
+consent the app completes the sync automatically and shows `N events synced`
+with a link to Google Calendar. The API deployment needs these server-only
+variables plus the included Supabase migration:
+
+```text
+GOOGLE_CALENDAR_CLIENT_ID=
+GOOGLE_CALENDAR_CLIENT_SECRET=
+GOOGLE_CALENDAR_STATE_SECRET=
+TRIP_PLANNER_UI_URL=https://your-ui.example
+```
+
+Register `https://your-api.example/calendar/google/callback` as the OAuth
+redirect URI in Google Cloud. Never put the Google client secret in this
+frontend repository.
+
 ## What's here vs. simplified for time
 
 - **Desktop**: the approved three-pane layout (map | timeline | chat), all

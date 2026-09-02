@@ -10,6 +10,7 @@ type ChatTurnResponse = {
   tripId: string | null;
   toolCalls: string[];
   suggestedActions?: SuggestedAction[];
+  calendarSync?: ChatMessage["calendarSync"];
 };
 
 // Keyed by message index — ephemeral, per-render-only UI state for the
@@ -177,7 +178,7 @@ export function ChatPanel({
       });
       setMessages((current) => [
         ...current,
-        { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions },
+        { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions, calendarSync: result.calendarSync },
       ]);
       lastHistoryLength.current += 2;
       if (result.tripId && result.tripId !== tripId) onTripIdChange(result.tripId);
@@ -243,6 +244,16 @@ export function ChatPanel({
                 onCancel={() => dismissActions(index)}
                 locale={locale}
               />
+            )}
+            {message.role === "assistant" && message.calendarSync?.status === "authorization_required" && message.calendarSync.authorizationUrl && (
+              <a className="calendar-chat-link" href={message.calendarSync.authorizationUrl}>
+                {locale === "vi" ? "Ket noi Google Calendar" : "Connect Google Calendar"}
+              </a>
+            )}
+            {message.role === "assistant" && message.calendarSync?.status === "synced" && message.calendarSync.calendarUrl && (
+              <a className="calendar-chat-link" href={message.calendarSync.calendarUrl} target="_blank" rel="noreferrer">
+                {message.calendarSync.syncedEventCount} {locale === "vi" ? "events da dong bo" : "events synced"} ↗
+              </a>
             )}
           </div>
         ))}

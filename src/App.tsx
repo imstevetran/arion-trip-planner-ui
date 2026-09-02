@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { registerAllTools } from "./lib/webmcp/tools";
+import { callTool, registerAllTools } from "./lib/webmcp/tools";
 import { registerAllResources } from "./lib/webmcp/resources";
 import { setCurrentLocale, setCurrentTripId } from "./lib/webmcp/state";
 import { apiGet } from "./lib/api";
@@ -80,6 +80,15 @@ export default function App() {
     // even without an explicit tool call from this tab.
     const interval = setInterval(() => void refresh(), 6000);
     return () => clearInterval(interval);
+  }, [tripId, refresh]);
+
+  // Google redirects back here after consent. Complete the original request
+  // automatically so the person lands on the synced result.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("calendar") !== "connected" || params.get("tripId") !== tripId) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    void callTool("addPlanToGoogleCalendar").then(() => refresh());
   }, [tripId, refresh]);
 
   useEffect(() => {

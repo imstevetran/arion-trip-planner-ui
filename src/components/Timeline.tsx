@@ -3,6 +3,7 @@ import { callTool } from "../lib/webmcp/tools";
 import { t, type Locale } from "../lib/i18n";
 import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
 import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
+import { CalendarExportButton } from "./CalendarExportButton";
 import type {
   FleetVehicle,
   TripAccommodationOption,
@@ -160,13 +161,16 @@ export function Timeline({
             {trip.trip.start_date} – {trip.trip.end_date} · {trip.trip.status}
           </p>
         </div>
-        <div className="budget-block">
+        <div className="topbar-actions">
+          {trip.trip.status !== "draft" && trip.trip.status !== "planning" && <CalendarExportButton trip={trip} locale={locale} />}
+          <div className="budget-block">
           <div className="budget-label">{t(locale, "budgetUsed")}</div>
           <div className="budget-figs mono">
             {formatVnd(trip.budget.usedVnd)} / {formatVnd(trip.budget.totalVnd)}
           </div>
           <div className="budget-bar">
             <i style={{ width: `${Math.min(100, (trip.budget.usedVnd / Math.max(1, trip.budget.totalVnd)) * 100)}%` }} />
+          </div>
           </div>
         </div>
       </div>

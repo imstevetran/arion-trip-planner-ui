@@ -75,6 +75,8 @@ export function ChatPanel({
   onToolCallsExecuted,
   externalMessage,
   onExternalMessageSent,
+  onStartNewTrip,
+  onCloseTrip,
 }: {
   tripId: string | null;
   locale: Locale;
@@ -85,6 +87,8 @@ export function ChatPanel({
   // and pressed send themselves.
   externalMessage?: string | null;
   onExternalMessageSent?: () => void;
+  onStartNewTrip?: () => void;
+  onCloseTrip?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -200,6 +204,12 @@ export function ChatPanel({
     <div className="chat-panel">
       <div className="chat-head">
         <h3>{t(locale, "chat")}</h3>
+        {(onStartNewTrip || onCloseTrip) && (
+          <div className="chat-trip-actions">
+            {onStartNewTrip && <button type="button" onClick={onStartNewTrip}>{locale === "vi" ? "Chuyến mới" : "New trip"}</button>}
+            {onCloseTrip && <button type="button" className="close-trip" aria-label={locale === "vi" ? "Đóng chuyến hiện tại" : "Close current trip"} onClick={onCloseTrip}>×</button>}
+          </div>
+        )}
       </div>
       <div className="chat-scroll" ref={scrollRef}>
         {messages.length === 0 && <p className="empty-hint">{t(locale, "noTripYet")}</p>}

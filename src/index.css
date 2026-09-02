@@ -43,10 +43,10 @@ a { color: var(--primary); }
 
 .icon { width: 15px; height: 15px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---------- create-trip form ---------- */
+/* ---------- create-trip (form or chat) ---------- */
 .create-trip {
   max-width: 480px;
-  margin: 10vh auto;
+  margin: 8vh auto;
   padding: 32px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -54,8 +54,12 @@ a { color: var(--primary); }
   box-shadow: 0 1rem 2.5rem rgba(15, 23, 42, 0.045);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
+.create-trip.chat-mode { max-width: 520px; padding: 0; overflow: hidden; }
+.create-trip-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.create-trip.chat-mode .create-trip-head { padding: 20px 24px 0; }
+.create-trip-body { display: flex; flex-direction: column; gap: 14px; }
 .create-trip h1 { margin: 0 0 4px; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
 .create-trip label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted-foreground); font-weight: 600; }
 .create-trip input {
@@ -63,9 +67,11 @@ a { color: var(--primary); }
   background: var(--background); color: var(--foreground);
 }
 .create-trip .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.lang-switch { display: flex; gap: 4px; background: var(--muted); border-radius: 8px; padding: 3px; align-self: flex-end; }
-.lang-switch button { all: unset; cursor: pointer; padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 700; color: var(--muted-foreground); }
-.lang-switch button.active { background: var(--card); color: var(--foreground); }
+.create-trip-chat-body { height: 62vh; min-height: 440px; max-height: 640px; display: flex; flex-direction: column; }
+.create-trip-chat-body .chat-panel { flex: 1; min-height: 0; }
+.lang-switch, .mode-switch { display: flex; gap: 4px; background: var(--muted); border-radius: 8px; padding: 3px; }
+.lang-switch button, .mode-switch button { all: unset; cursor: pointer; padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 700; color: var(--muted-foreground); }
+.lang-switch button.active, .mode-switch button.active { background: var(--card); color: var(--foreground); }
 
 /* ---------- buttons / pills (mirror src/components/ui/*) ---------- */
 .btn {

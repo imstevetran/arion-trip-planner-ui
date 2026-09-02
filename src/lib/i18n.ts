@@ -23,6 +23,8 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     rejected: "Rejected",
     failed: "Failed",
     noTripYet: "Start by telling the assistant your destination, budget, and dates.",
+    modeForm: "Form",
+    modeChat: "Chat",
   },
   vi: {
     appName: "Trip planner",
@@ -46,6 +48,8 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     rejected: "Đã từ chối",
     failed: "Thất bại",
     noTripYet: "Bắt đầu bằng cách nói với trợ lý điểm đến, ngân sách và ngày đi.",
+    modeForm: "Biểu mẫu",
+    modeChat: "Trò chuyện",
   },
 };
 

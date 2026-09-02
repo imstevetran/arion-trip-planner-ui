@@ -5,11 +5,9 @@ import type { Trip } from "../types";
 
 export function CreateTripForm({
   locale,
-  onLocaleChange,
   onCreated,
 }: {
   locale: Locale;
-  onLocaleChange: (locale: Locale) => void;
   onCreated: (trip: Trip) => void;
 }) {
   const [destination, setDestination] = useState("");
@@ -42,15 +40,7 @@ export function CreateTripForm({
   }
 
   return (
-    <form className="create-trip" onSubmit={handleSubmit}>
-      <div className="lang-switch" role="group" aria-label="Language">
-        <button type="button" className={locale === "en" ? "active" : ""} onClick={() => onLocaleChange("en")}>
-          EN
-        </button>
-        <button type="button" className={locale === "vi" ? "active" : ""} onClick={() => onLocaleChange("vi")}>
-          VI
-        </button>
-      </div>
+    <form className="create-trip-body" onSubmit={handleSubmit}>
       <h1>{t(locale, "newTrip")}</h1>
       <label>
         {t(locale, "destination")}

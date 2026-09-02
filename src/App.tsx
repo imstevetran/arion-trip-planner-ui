@@ -4,8 +4,8 @@ import { registerAllResources } from "./lib/webmcp/resources";
 import { setCurrentLocale, setCurrentTripId } from "./lib/webmcp/state";
 import { apiGet } from "./lib/api";
 import type { Locale } from "./lib/i18n";
-import type { FleetVehicle, Trip, TripBooking, TripDisruption, TripResource } from "./types";
-import { CreateTripForm } from "./components/CreateTripForm";
+import type { FleetVehicle, TripBooking, TripDisruption, TripResource } from "./types";
+import { CreateTripEntry } from "./components/CreateTripEntry";
 import { Timeline } from "./components/Timeline";
 import { ChatPanel } from "./components/ChatPanel";
 import { RouteMap } from "./components/RouteMap";
@@ -74,13 +74,7 @@ export default function App() {
   }, []);
 
   if (!tripId) {
-    return (
-      <CreateTripForm
-        locale={locale}
-        onLocaleChange={setLocale}
-        onCreated={(newTrip: Trip) => setTripId(newTrip.id)}
-      />
-    );
+    return <CreateTripEntry locale={locale} onLocaleChange={setLocale} onCreated={setTripId} />;
   }
 
   return (

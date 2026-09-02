@@ -11,11 +11,18 @@ export function ChatPanel({
   locale,
   onTripIdChange,
   onToolCallsExecuted,
+  externalMessage,
+  onExternalMessageSent,
 }: {
   tripId: string | null;
   locale: Locale;
   onTripIdChange: (id: string) => void;
   onToolCallsExecuted: () => void;
+  // A suggestion chip elsewhere in the UI can push a ready-made message in
+  // here and have it sent immediately, same as if the customer had typed
+  // and pressed send themselves.
+  externalMessage?: string | null;
+  onExternalMessageSent?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -47,10 +54,25 @@ export function ChatPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  async function send() {
-    const text = draft.trim();
+  useEffect(() => {
+    // Also waits on `busy` — send() itself no-ops while a previous turn is
+    // still in flight, so without this a chip clicked mid-reply would get
+    // silently dropped (this effect would still fire once, send() would
+    // bail, and the pending message would already be cleared). Re-running
+    // when busy flips back to false retries it instead of losing it.
+    if (!externalMessage || busy) return;
+    void send(externalMessage);
+    onExternalMessageSent?.();
+    // Deliberately omits send/onExternalMessageSent — send closes over
+    // draft/tripId/locale, which change every render and would turn this
+    // into a resend loop if included.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalMessage, busy]);
+
+  async function send(overrideText?: string) {
+    const text = (overrideText ?? draft).trim();
     if (!text || busy) return;
-    setDraft("");
+    if (overrideText === undefined) setDraft("");
     setMessages((current) => [...current, { role: "user", text }]);
     setBusy(true);
     try {

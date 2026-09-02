@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { callTool } from "../lib/webmcp/tools";
 import { t, type Locale } from "../lib/i18n";
+import { suggestionStartDate, type TripSuggestion } from "../lib/tripSuggestions";
 import type { Trip } from "../types";
 
 export function CreateTripForm({
   locale,
+  prefill,
   onCreated,
 }: {
   locale: Locale;
+  prefill?: TripSuggestion | null;
   onCreated: (trip: Trip) => void;
 }) {
   const [destination, setDestination] = useState("");
@@ -17,6 +20,18 @@ export function CreateTripForm({
   const [days, setDays] = useState("3");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Re-fills whenever a different suggestion chip is clicked (keyed off
+  // `prefill` itself changing) — a real destination/budget/days combo the
+  // customer can still edit, not a locked-in choice.
+  useEffect(() => {
+    if (!prefill) return;
+    setDestination(prefill.destination);
+    setOrigin(prefill.origin);
+    setBudgetVnd(String(prefill.budgetVnd));
+    setDays(String(prefill.days));
+    setStartDate(suggestionStartDate());
+  }, [prefill]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

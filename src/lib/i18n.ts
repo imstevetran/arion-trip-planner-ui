@@ -25,6 +25,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     noTripYet: "Start by telling the assistant your destination, budget, and dates.",
     modeForm: "Form",
     modeChat: "Chat",
+    trending: "Trending",
   },
   vi: {
     appName: "Trip planner",
@@ -50,6 +51,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     noTripYet: "Bắt đầu bằng cách nói với trợ lý điểm đến, ngân sách và ngày đi.",
     modeForm: "Biểu mẫu",
     modeChat: "Trò chuyện",
+    trending: "Xu hướng",
   },
 };
 

@@ -32,6 +32,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     cancel: "Cancel",
     drive: "Drive",
     actionsConfirmedPrefix: "Yes, please go ahead with: ",
+    chatError: "Something went wrong on our end. Please try sending that again.",
   },
   vi: {
     appName: "Trip planner",
@@ -64,6 +65,7 @@ export const STRINGS: Record<Locale, Record<string, string>> = {
     cancel: "Huỷ",
     drive: "Lái xe",
     actionsConfirmedPrefix: "Vâng, giúp tôi: ",
+    chatError: "Đã có lỗi xảy ra. Vui lòng gửi lại tin nhắn.",
   },
 };
 

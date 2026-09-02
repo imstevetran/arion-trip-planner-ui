@@ -184,10 +184,13 @@ export function ChatPanel({
       if (result.tripId && result.tripId !== tripId) onTripIdChange(result.tripId);
       if (result.toolCalls.length > 0) onToolCallsExecuted();
     } catch (error) {
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", text: error instanceof Error ? error.message : String(error) },
-      ]);
+      // The raw error (e.g. "LLM gateway request failed (500): {...}") is
+      // real diagnostic detail, not something a customer should have to
+      // read as the assistant's "reply" — confirmed live, a customer
+      // reported the assistant "doesn't reply anything" when what actually
+      // happened was this exact JSON blob rendered in the bubble.
+      console.error("[chat] send failed:", error);
+      setMessages((current) => [...current, { role: "assistant", text: t(locale, "chatError") }]);
     } finally {
       setBusy(false);
     }

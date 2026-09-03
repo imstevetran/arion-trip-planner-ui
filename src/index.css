@@ -244,8 +244,20 @@ a { color: var(--primary); }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
 .day-label { font-weight: 700; font-size: 13.5px; }
 
-.travel-leg { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 15px; font-size: 11.5px; color: var(--muted-foreground); }
+.travel-leg { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 2px 0 2px 15px; font-size: 11.5px; color: var(--muted-foreground); }
 .travel-leg .icon { width: 12px; height: 12px; }
+/* flex-basis 100% is the standard trick to force this onto its own line
+   within the flex-wrap row above, instead of squeezing beside the "Drive ·
+   Xkm" text. Only present on the first driving leg — see Timeline.tsx's
+   firstDrivingLegStopId. */
+.travel-leg-vehicle { flex: 1 0 100%; margin: 4px 0 2px; }
+.inline-vehicle {
+  padding: 10px 12px; border-radius: 9px; background: var(--card);
+  border: 1px solid var(--border); font-size: 12.5px; color: var(--foreground);
+}
+.inline-vehicle-top { display: flex; align-items: center; gap: 8px; }
+.inline-vehicle-top .icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--secondary-foreground); }
+.inline-vehicle-top .stop-name { flex: 1; }
 
 .stop-card { display: flex; align-items: flex-start; gap: 12px; padding: 13px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 0.5rem 1.2rem rgba(15,23,42,0.03); }
 .stop-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--accent); }

@@ -32,14 +32,29 @@ function formatDuration(minutes: number): string {
 // stop — self-drive only (this product doesn't have a per-leg vehicle yet,
 // just the eventual whole-trip assignment), so "Drive" plus ORS's estimated
 // distance/duration for that specific leg (route.legs from trip://current,
-// see trip-planner-api's routes/resources.ts).
-function TravelLeg({ leg, locale }: { leg: TripRouteLeg; locale: Locale }) {
+// see trip-planner-api's routes/resources.ts). `vehicleSlot` renders the
+// vehicle assignment/picker inline on the FIRST driving leg only (see
+// Timeline's firstDrivingLegStopId) — that's where the rental car is
+// actually needed from, not a disconnected section at the end of the
+// itinerary. A trip is one continuous self-drive segment today (no way yet
+// to mark a later leg as "by flight/boat instead," which would be where a
+// second vehicle choice would make sense), so one inline picker covers it.
+function TravelLeg({
+  leg,
+  locale,
+  vehicleSlot,
+}: {
+  leg: TripRouteLeg;
+  locale: Locale;
+  vehicleSlot?: React.ReactNode;
+}) {
   return (
     <div className="travel-leg">
       <CarIcon />
       <span>
         {t(locale, "drive")} · {leg.distanceKm} km · {formatDuration(leg.durationMinutes)}
       </span>
+      {vehicleSlot && <div className="travel-leg-vehicle">{vehicleSlot}</div>}
     </div>
   );
 }
@@ -218,6 +233,32 @@ export function Timeline({
     return groups;
   }, {});
 
+  // Where the rental car is actually needed from — the destination stop of
+  // the itinerary's first driving leg, not a disconnected "Vehicle" section
+  // at the end. See TravelLeg's vehicleSlot.
+  const firstDrivingLegStopId = trip.route?.legs[0]?.toStopId;
+  const vehicleContent = trip.vehicleAssignment ? (
+    <div className="inline-vehicle">
+      <div className="inline-vehicle-top">
+        <CarIcon />
+        <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
+        <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+      </div>
+      {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
+        <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
+      )}
+      {!readOnly && <ApprovalRow
+        booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
+        kind="vehicle"
+        hasCustomerDetails={hasCustomerDetails}
+        locale={locale}
+        onChanged={onChanged}
+      />}
+    </div>
+  ) : trip.vehicleOptions.length > 0 && !readOnly ? (
+    <VehicleOptions options={trip.vehicleOptions} locale={locale} onChanged={onChanged} />
+  ) : null;
+
   return (
     <div className={embedded ? "timeline-main" : "app-main"}>
       <div className="app-topbar">
@@ -292,7 +333,13 @@ export function Timeline({
               const leg = trip.route?.legs.find((candidate) => candidate.toStopId === stop.id);
               return (
                 <div key={stop.id}>
-                  {leg && <TravelLeg leg={leg} locale={locale} />}
+                  {leg && (
+                    <TravelLeg
+                      leg={leg}
+                      locale={locale}
+                      vehicleSlot={stop.id === firstDrivingLegStopId ? vehicleContent : undefined}
+                    />
+                  )}
                   <div className="stop-card">
                     <div className="stop-icon">
                       <MapPinIcon />
@@ -316,34 +363,15 @@ export function Timeline({
           </div>
         ))}
 
-        {(trip.vehicleAssignment || trip.vehicleOptions.length > 0) && (
+        {/* Fallback only — normally vehicleContent renders inline at the
+            first driving leg above. This covers the edge case where there
+            is no driving leg at all yet (e.g. a single-stop trip, or the
+            route hasn't been computed yet) but a vehicle was already
+            searched/assigned, so it's never silently lost. */}
+        {!firstDrivingLegStopId && vehicleContent && (
           <div className="day-group">
             <div className="section-title">Vehicle</div>
-            {trip.vehicleAssignment ? (
-              <div className="stop-card">
-                <div className="stop-icon">
-                  <CarIcon />
-                </div>
-                <div className="stop-body">
-                  <div className="stop-top">
-                    <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
-                    <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
-                  </div>
-                  {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
-                    <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
-                  )}
-                  {!readOnly && <ApprovalRow
-                    booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
-                    kind="vehicle"
-                    hasCustomerDetails={hasCustomerDetails}
-                    locale={locale}
-                    onChanged={onChanged}
-                  />}
-                </div>
-              </div>
-            ) : (
-              !readOnly && <VehicleOptions options={trip.vehicleOptions} locale={locale} onChanged={onChanged} />
-            )}
+            {vehicleContent}
           </div>
         )}
       </div>

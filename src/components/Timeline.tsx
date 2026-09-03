@@ -128,10 +128,12 @@ function VehicleOptions({
   options,
   locale,
   onChanged,
+  onCancel,
 }: {
   options: TripVehicleOption[];
   locale: Locale;
   onChanged: () => void;
+  onCancel?: () => void;
 }) {
   if (options.length === 0) return null;
 
@@ -156,6 +158,11 @@ function VehicleOptions({
           )}
         </div>
       ))}
+      {onCancel && (
+        <button type="button" className="link-btn" onClick={onCancel}>
+          {t(locale, "cancel")}
+        </button>
+      )}
     </div>
   );
 }
@@ -227,6 +234,7 @@ export function Timeline({
   const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const days = trip.stops.reduce<Record<string, typeof trip.stops>>((groups, stop) => {
     const key = stop.planned_date ?? "unscheduled";
     (groups[key] ??= []).push(stop);
@@ -237,18 +245,32 @@ export function Timeline({
   // the itinerary's first driving leg, not a disconnected "Vehicle" section
   // at the end. See TravelLeg's vehicleSlot.
   const firstDrivingLegStopId = trip.route?.legs[0]?.toStopId;
-  const vehicleContent = trip.vehicleAssignment ? (
+  const vehicleBooking = trip.vehicleAssignment
+    ? bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)
+    : undefined;
+  // assignVehicle (backend) already replaces the existing assignment rather
+  // than rejecting a second call, so switching vehicles is just a matter of
+  // showing the picker again — except once the booking is actually
+  // "booked" (a real reservation went out), which is why that state alone
+  // hides the button rather than gating on approval status.
+  const canChangeVehicle = !readOnly && vehicleBooking?.status !== "booked";
+  const vehicleContent = trip.vehicleAssignment && !showVehiclePicker ? (
     <div className="inline-vehicle">
       <div className="inline-vehicle-top">
         <CarIcon />
         <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
         <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+        {canChangeVehicle && (
+          <button type="button" className="link-btn" onClick={() => setShowVehiclePicker(true)}>
+            {t(locale, "changeVehicle")}
+          </button>
+        )}
       </div>
       {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
         <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
       )}
       {!readOnly && <ApprovalRow
-        booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
+        booking={vehicleBooking}
         kind="vehicle"
         hasCustomerDetails={hasCustomerDetails}
         locale={locale}
@@ -256,7 +278,15 @@ export function Timeline({
       />}
     </div>
   ) : trip.vehicleOptions.length > 0 && !readOnly ? (
-    <VehicleOptions options={trip.vehicleOptions} locale={locale} onChanged={onChanged} />
+    <VehicleOptions
+      options={trip.vehicleOptions}
+      locale={locale}
+      onChanged={() => {
+        setShowVehiclePicker(false);
+        onChanged();
+      }}
+      onCancel={trip.vehicleAssignment ? () => setShowVehiclePicker(false) : undefined}
+    />
   ) : null;
 
   return (

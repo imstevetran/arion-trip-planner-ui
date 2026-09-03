@@ -40,6 +40,11 @@ export type TripStop = {
   longitude: number | null;
   planned_date: string | null;
   expected_duration_hours: number | null;
+  // Best-effort Wikipedia photo (no Google Places API key needed) — null
+  // until geocoded and a nearby match with an image is found, which isn't
+  // guaranteed for every stop.
+  image_url: string | null;
+  image_attribution: string | null;
 };
 
 export type TripFlightOption = {

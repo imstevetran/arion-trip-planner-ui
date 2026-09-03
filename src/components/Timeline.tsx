@@ -5,7 +5,6 @@ import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
 import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
 import { CalendarExportButton } from "./CalendarExportButton";
 import { ShareItineraryButton } from "./ShareItineraryButton";
-import { CustomerDetailsForm } from "./CustomerDetailsForm";
 import type {
   FleetVehicle,
   TripAccommodationOption,
@@ -68,7 +67,7 @@ function bookingFor(bookings: TripBooking[], key: keyof TripBooking, id: string)
 // doesn't yet (Brave-search results are self-booked by the customer via a
 // link, not booked through us), so it's the only kind that doesn't need
 // this gate.
-const KINDS_REQUIRING_CUSTOMER_DETAILS: TripBookingKind[] = ["vehicle", "flight"];
+export const KINDS_REQUIRING_CUSTOMER_DETAILS: TripBookingKind[] = ["vehicle", "flight"];
 
 function ApprovalRow({
   booking,
@@ -102,8 +101,12 @@ function ApprovalRow({
   if (booking.status === "failed") return <span className="status-pill warn">{t(locale, "failed")}</span>;
   if (booking.status !== "pending_approval" && booking.status !== "approved") return null;
 
+  // The actual name/phone/DOB form now lives in the chat panel (a card ChatPanel
+  // shows whenever this same condition is true — see App.tsx's
+  // needsCustomerDetails) rather than inline here, which used to make every
+  // pending booking card bulky with a 4-field form. This is just a pointer.
   if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(kind) && !hasCustomerDetails) {
-    return <CustomerDetailsForm locale={locale} onSaved={onChanged} />;
+    return <p className="stop-meta customer-details-pending-hint">{t(locale, "customerDetailsInChatHint")}</p>;
   }
 
   return (
@@ -394,7 +397,11 @@ export function Timeline({
                   )}
                   <div className="stop-card">
                     <div className="stop-icon">
-                      <MapPinIcon />
+                      {stop.image_url ? (
+                        <img className="stop-thumb" src={stop.image_url} alt="" loading="lazy" />
+                      ) : (
+                        <MapPinIcon />
+                      )}
                     </div>
                     <div className="stop-body">
                       <div className="stop-top">

@@ -3,6 +3,7 @@ import { apiGet, apiPostStream } from "../lib/api";
 import { STRINGS, t, type Locale } from "../lib/i18n";
 import { renderInline, renderMarkdown } from "../lib/markdown";
 import { SendIcon } from "./icons";
+import { CustomerDetailsForm } from "./CustomerDetailsForm";
 import type { ChatMessage, SuggestedAction } from "../types";
 
 type ChatTurnResponse = {
@@ -95,6 +96,8 @@ export function ChatPanel({
   onStartNewTrip,
   onCloseTrip,
   getTurnstileToken,
+  needsCustomerDetails = false,
+  onCustomerDetailsSaved,
 }: {
   tripId: string | null;
   locale: Locale;
@@ -112,6 +115,12 @@ export function ChatPanel({
   // app shell's, in App.tsx) and every message already carries a real
   // tripId, so there's nothing here for Turnstile to gate.
   getTurnstileToken?: () => Promise<string>;
+  // App.tsx computes this from trip+bookings (a pending vehicle/flight
+  // booking with no traveler identity on file yet) — shown as a card below
+  // the conversation rather than blocking a specific message, since it's
+  // trip state, not something any one chat turn produced.
+  needsCustomerDetails?: boolean;
+  onCustomerDetailsSaved?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -318,6 +327,13 @@ export function ChatPanel({
             )}
           </div>
         ))}
+        {needsCustomerDetails && (
+          <div className="msg assistant">
+            <div className="bubble customer-details-card">
+              <CustomerDetailsForm locale={locale} onSaved={() => onCustomerDetailsSaved?.()} />
+            </div>
+          </div>
+        )}
         {busy && (
           <div className="msg assistant">
             <div className="bubble typing">

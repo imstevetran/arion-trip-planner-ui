@@ -6,7 +6,7 @@ import { apiGet } from "./lib/api";
 import type { Locale } from "./lib/i18n";
 import type { FleetVehicle, TripBooking, TripDisruption, TripResource } from "./types";
 import { CreateTripEntry } from "./components/CreateTripEntry";
-import { Timeline } from "./components/Timeline";
+import { Timeline, KINDS_REQUIRING_CUSTOMER_DETAILS } from "./components/Timeline";
 import { ChatPanel } from "./components/ChatPanel";
 import { RouteMap } from "./components/RouteMap";
 import { PlanOptions } from "./components/PlanOptions";
@@ -112,6 +112,19 @@ export default function App() {
     }} />;
   }
 
+  // Drives the traveler-details card ChatPanel shows — same condition
+  // Timeline's ApprovalRow used to gate the inline form on, now computed
+  // once here since ChatPanel needs it too. Real bookings (vehicle/flight)
+  // can't be placed under a placeholder identity.
+  const hasCustomerDetails = Boolean(trip?.trip.customer_full_name && trip?.trip.customer_phone);
+  const needsCustomerDetails =
+    !hasCustomerDetails &&
+    bookings.some(
+      (booking) =>
+        KINDS_REQUIRING_CUSTOMER_DETAILS.includes(booking.kind) &&
+        (booking.status === "pending_approval" || booking.status === "approved"),
+    );
+
   return (
     <div className={`app-shell mobile-${mobileView}${mobileChatOpen ? " mobile-chat-open" : ""}${desktopPlanOpen ? "" : " plan-collapsed"}${isSharedView ? " shared-view" : ""}`}>
       <div className="mobile-nav" aria-label="Trip view">
@@ -157,6 +170,8 @@ export default function App() {
           onExternalMessageSent={() => setAssistantMessage(null)}
           onStartNewTrip={leaveCurrentTrip}
           onCloseTrip={leaveCurrentTrip}
+          needsCustomerDetails={needsCustomerDetails}
+          onCustomerDetailsSaved={() => void refresh()}
         />
       </div>}
     </div>

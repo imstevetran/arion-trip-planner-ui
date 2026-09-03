@@ -295,6 +295,17 @@ a { color: var(--primary); }
 .customer-details-error { margin: 0; color: var(--rose); font-size: 11.5px; }
 .customer-details-form .btn { align-self: flex-start; }
 
+/* Chat-panel placement (ChatPanel's needsCustomerDetails card) — the form's
+   own dashed box is the only border needed, so drop the bubble's so it
+   isn't double-boxed, and let the form's own padding control spacing
+   instead of stacking bubble padding + form margin-top on top of it. */
+.bubble.customer-details-card { background: transparent; border: none; padding: 0; }
+.bubble.customer-details-card .customer-details-form { margin-top: 0; }
+
+/* Timeline's ApprovalRow — points at the chat card above instead of
+   repeating the form inline. */
+.customer-details-pending-hint { color: var(--primary); font-weight: 600; }
+
 .timeline-scroll { padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
 .day-label { font-weight: 700; font-size: 13.5px; }
@@ -315,7 +326,8 @@ a { color: var(--primary); }
 .inline-vehicle-top .stop-name { flex: 1; }
 
 .stop-card { display: flex; align-items: flex-start; gap: 12px; padding: 13px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 0.5rem 1.2rem rgba(15,23,42,0.03); }
-.stop-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--accent); }
+.stop-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--accent); overflow: hidden; }
+.stop-thumb { width: 100%; height: 100%; object-fit: cover; }
 .stop-body { flex: 1; min-width: 0; }
 .stop-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .stop-name { font-weight: 600; font-size: 14px; }

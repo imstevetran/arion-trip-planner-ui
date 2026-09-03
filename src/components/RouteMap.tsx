@@ -7,6 +7,7 @@ import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import type { StreetImageryResult } from "../lib/streetImagery";
 import { exploreUrl, fetchStreetImagery } from "../lib/streetImagery";
+import { fetchOrsRoute, type OrsRoute, type OrsTravelProfile } from "../lib/openRouteService";
 
 // Own the map — not nested inside the timeline's scroll container (an
 // explicit requirement from the design review). Renders straight off
@@ -311,6 +312,10 @@ function StopMarker({
 export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: Locale }) {
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
   const [previewStopId, setPreviewStopId] = useState<string | null>(null);
+  const [travelProfile, setTravelProfile] = useState<OrsTravelProfile>("driving-car");
+  const [selectedRoute, setSelectedRoute] = useState<OrsRoute | null>(null);
+  const [routeStatus, setRouteStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [routeError, setRouteError] = useState("");
   const allStops = trip?.stops ?? [];
   const stops = useMemo(
     () => (trip?.stops ?? []).filter((stop) => stop.latitude !== null && stop.longitude !== null),
@@ -338,25 +343,45 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
     [trip],
   );
 
-  const selectedLeg = useMemo(() => {
-    if (selectedStops.length !== 2 || !trip?.route) return null;
-    const [from, to] = selectedStops;
-    return trip.route.legs.find((leg) => leg.fromStopId === from.id && leg.toStopId === to.id) ?? null;
-  }, [selectedStops, trip]);
+  const selectedRouteLine = useMemo<Array<[number, number]>>(
+    () => (selectedRoute?.geometry ?? []).map(([lon, lat]) => [lat, lon]),
+    [selectedRoute],
+  );
 
-  const googleMapsUrl = useMemo(() => {
-    if (selectedStops.length !== 2) return null;
-    const [origin, destination] = selectedStops;
-    const query = new URLSearchParams({
-      api: "1",
-      origin: `${origin.latitude},${origin.longitude}`,
-      destination: `${destination.latitude},${destination.longitude}`,
-      travelmode: "driving",
-      utm_source: "arion_trip_planner",
-      utm_campaign: "selected_stops_directions",
-    });
-    return `https://www.google.com/maps/dir/?${query.toString()}`;
-  }, [selectedStops]);
+  useEffect(() => {
+    if (selectedStops.length !== 2) {
+      const reset = window.setTimeout(() => {
+        setSelectedRoute(null);
+        setRouteStatus("idle");
+        setRouteError("");
+      }, 0);
+      return () => window.clearTimeout(reset);
+    }
+    const controller = new AbortController();
+    const [from, to] = selectedStops;
+    const start = window.setTimeout(() => {
+      setSelectedRoute(null);
+      setRouteStatus("loading");
+      setRouteError("");
+      fetchOrsRoute(
+        [from.longitude as number, from.latitude as number],
+        [to.longitude as number, to.latitude as number],
+        travelProfile,
+        controller.signal,
+      ).then((route) => {
+        setSelectedRoute(route);
+        setRouteStatus("idle");
+      }).catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setRouteStatus("error");
+        setRouteError(error instanceof Error ? error.message : "OpenRouteService request failed");
+      });
+    }, 0);
+    return () => {
+      window.clearTimeout(start);
+      controller.abort();
+    };
+  }, [selectedStops, travelProfile]);
 
   const copy = locale === "vi"
     ? {
@@ -365,6 +390,9 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
         destination: "Điểm đến",
         plannedLeg: "Chặng trong lịch trình (ORS)",
         openGoogleMaps: "Mở chỉ đường Google Maps",
+        travelMode: "Phương tiện",
+        loadingRoute: "Đang tìm tuyến đường bằng ORS…",
+        routeFailed: "Không thể tìm tuyến đường",
         reverse: "Đổi chiều",
         clear: "Xóa chọn",
         geocoding: (count: number) => `Đang định vị ${count} điểm còn lại…`,
@@ -375,10 +403,30 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
         destination: "To",
         plannedLeg: "Planned leg (ORS)",
         openGoogleMaps: "Open directions in Google Maps",
+        travelMode: "Travel mode",
+        loadingRoute: "Finding a route with ORS…",
+        routeFailed: "Could not find a route",
         reverse: "Swap",
         clear: "Clear",
         geocoding: (count: number) => `Locating ${count} more ${count === 1 ? "stop" : "stops"}…`,
       };
+
+  const travelModes: Array<{ value: OrsTravelProfile; label: string; icon: string }> = locale === "vi"
+    ? [
+        { value: "driving-car", label: "Ô tô", icon: "🚗" },
+        { value: "foot-walking", label: "Đi bộ", icon: "🚶" },
+        { value: "cycling-regular", label: "Xe đạp", icon: "🚲" },
+        { value: "cycling-electric", label: "Xe đạp điện", icon: "⚡" },
+        { value: "foot-hiking", label: "Đi bộ đường dài", icon: "🥾" },
+      ]
+    : [
+        { value: "driving-car", label: "Car", icon: "🚗" },
+        { value: "foot-walking", label: "Walking", icon: "🚶" },
+        { value: "cycling-regular", label: "Bicycle", icon: "🚲" },
+        { value: "cycling-electric", label: "E-bike", icon: "⚡" },
+        { value: "foot-hiking", label: "Hiking", icon: "🥾" },
+      ];
+  const activeTravelMode = travelModes.find((mode) => mode.value === travelProfile)!;
 
   function toggleStop(stopId: string) {
     setPreviewStopId(stopId);
@@ -403,6 +451,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
           attribution="&copy; OpenStreetMap contributors"
         />
         {routeLine.length > 1 && <Polyline positions={routeLine} pathOptions={{ color: "#e4ad63", weight: 3, dashArray: "1 8" }} />}
+        {selectedRouteLine.length > 1 && <Polyline positions={selectedRouteLine} pathOptions={{ color: "#168457", weight: 5, opacity: 0.9 }} />}
         {stops.map((stop) => (
           <StopMarker
             key={stop.id}
@@ -416,6 +465,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
           />
         ))}
         {stopPoints.length > 0 && <FitBounds points={stopPoints} />}
+        {selectedRouteLine.length > 1 && <FitBounds points={selectedRouteLine} />}
       </MapContainer>
       {ungeocodedCount > 0 && <p className="map-geocoding-note">{copy.geocoding(ungeocodedCount)}</p>}
       {stops.length > 0 && (
@@ -428,10 +478,20 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
                 <p><span className="map-directions-label origin">A</span><b>{copy.origin}</b> {selectedStops[0].place_name}</p>
                 <p><span className="map-directions-label destination">B</span><b>{copy.destination}</b> {selectedStops[1].place_name}</p>
               </div>
-              {selectedLeg && <p className="map-directions-leg">{copy.plannedLeg}: {selectedLeg.distanceKm.toFixed(1)} km · {Math.round(selectedLeg.durationMinutes)} min</p>}
-              <a className="map-google-directions" href={googleMapsUrl ?? undefined} target="_blank" rel="noreferrer">
-                {copy.openGoogleMaps}
-              </a>
+              <details className="map-travel-mode">
+                <summary><span>{copy.travelMode}</span><b>{activeTravelMode.icon} {activeTravelMode.label}</b></summary>
+                <div className="map-travel-options">
+                  {travelModes.map((mode) => (
+                    <label key={mode.value} className={travelProfile === mode.value ? "is-selected" : undefined}>
+                      <input type="radio" name="travel-profile" checked={travelProfile === mode.value} onChange={() => setTravelProfile(mode.value)} />
+                      <span aria-hidden="true">{mode.icon}</span>{mode.label}
+                    </label>
+                  ))}
+                </div>
+              </details>
+              {routeStatus === "loading" && <p className="map-route-status">{copy.loadingRoute}</p>}
+              {routeStatus === "error" && <p className="map-route-error">{copy.routeFailed}: {routeError}</p>}
+              {selectedRoute && <p className="map-directions-leg">ORS: {selectedRoute.distanceKm.toFixed(1)} km · {Math.round(selectedRoute.durationMinutes)} min</p>}
               <div className="map-directions-actions">
                 <button type="button" onClick={() => setSelectedStopIds(([from, to]) => to ? [to, from] : [])}>{copy.reverse}</button>
                 <button type="button" onClick={() => setSelectedStopIds([])}>{copy.clear}</button>

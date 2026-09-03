@@ -7,7 +7,7 @@ import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import type { StreetImageryResult } from "../lib/streetImagery";
 import { exploreUrl, fetchStreetImagery } from "../lib/streetImagery";
-import { fetchOrsRoute, type OrsRoute, type OrsTravelProfile } from "../lib/openRouteService";
+import { fetchOrsProfiles, fetchOrsRoute, type OrsRoute, type OrsTravelProfile } from "../lib/openRouteService";
 
 // Own the map — not nested inside the timeline's scroll container (an
 // explicit requirement from the design review). Renders straight off
@@ -286,12 +286,19 @@ function StopMarker({
   onPopupClose: () => void;
 }) {
   const popupRef = useRef<L.Popup | null>(null);
-  const updatePopup = useCallback(() => popupRef.current?.update(), []);
+  const icon = useMemo(() => markerIcon(stop.sequence, selection, offset), [offset, selection, stop.sequence]);
+  const updatePopup = useCallback(() => {
+    const popup = popupRef.current;
+    // Async Street View state can settle just after Leaflet closes/detaches
+    // the popup. Updating that detached instance makes Leaflet touch a null
+    // `_source`, so only remeasure while it is still open on the marker.
+    if (popup?.isOpen()) popup.update();
+  }, []);
 
   return (
     <Marker
       position={[stop.latitude as number, stop.longitude as number]}
-      icon={markerIcon(stop.sequence, selection, offset)}
+      icon={icon}
       eventHandlers={{ click: onSelect, popupclose: onPopupClose }}
     >
       {/* Hovering the open pin would otherwise float the tooltip right on
@@ -316,6 +323,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
   const [selectedRoute, setSelectedRoute] = useState<OrsRoute | null>(null);
   const [routeStatus, setRouteStatus] = useState<"idle" | "loading" | "error">("idle");
   const [routeError, setRouteError] = useState("");
+  const [supportedProfiles, setSupportedProfiles] = useState<OrsTravelProfile[]>(["driving-car"]);
   const allStops = trip?.stops ?? [];
   const stops = useMemo(
     () => (trip?.stops ?? []).filter((stop) => stop.latitude !== null && stop.longitude !== null),
@@ -349,7 +357,24 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
   );
 
   useEffect(() => {
-    if (selectedStops.length !== 2) {
+    const controller = new AbortController();
+    fetchOrsProfiles(controller.signal)
+      .then((profiles) => setSupportedProfiles(profiles.length > 0 ? profiles : ["driving-car"]))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  const selectedFrom = selectedStops[0];
+  const selectedTo = selectedStops[1];
+  const fromId = selectedFrom?.id ?? null;
+  const fromLatitude = selectedFrom?.latitude ?? null;
+  const fromLongitude = selectedFrom?.longitude ?? null;
+  const toId = selectedTo?.id ?? null;
+  const toLatitude = selectedTo?.latitude ?? null;
+  const toLongitude = selectedTo?.longitude ?? null;
+
+  useEffect(() => {
+    if (!fromId || !toId || fromLatitude === null || fromLongitude === null || toLatitude === null || toLongitude === null) {
       const reset = window.setTimeout(() => {
         setSelectedRoute(null);
         setRouteStatus("idle");
@@ -358,14 +383,13 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
       return () => window.clearTimeout(reset);
     }
     const controller = new AbortController();
-    const [from, to] = selectedStops;
     const start = window.setTimeout(() => {
       setSelectedRoute(null);
       setRouteStatus("loading");
       setRouteError("");
       fetchOrsRoute(
-        [from.longitude as number, from.latitude as number],
-        [to.longitude as number, to.latitude as number],
+        [fromLongitude, fromLatitude],
+        [toLongitude, toLatitude],
         travelProfile,
         controller.signal,
       ).then((route) => {
@@ -381,7 +405,15 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
       window.clearTimeout(start);
       controller.abort();
     };
-  }, [selectedStops, travelProfile]);
+  }, [fromId, fromLatitude, fromLongitude, toId, toLatitude, toLongitude, travelProfile]);
+
+  const mapFitPoints = useMemo<Array<[number, number]>>(() => {
+    if (selectedRouteLine.length > 1) return selectedRouteLine;
+    if (selectedStops.length === 2) {
+      return selectedStops.map((stop) => [stop.latitude as number, stop.longitude as number]);
+    }
+    return stopPoints;
+  }, [selectedRouteLine, selectedStops, stopPoints]);
 
   const copy = locale === "vi"
     ? {
@@ -393,6 +425,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
         travelMode: "Phương tiện",
         loadingRoute: "Đang tìm tuyến đường bằng ORS…",
         routeFailed: "Không thể tìm tuyến đường",
+        unavailableMode: "Chưa được bật trên ORS server",
         reverse: "Đổi chiều",
         clear: "Xóa chọn",
         geocoding: (count: number) => `Đang định vị ${count} điểm còn lại…`,
@@ -406,6 +439,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
         travelMode: "Travel mode",
         loadingRoute: "Finding a route with ORS…",
         routeFailed: "Could not find a route",
+        unavailableMode: "Not enabled on the ORS server",
         reverse: "Swap",
         clear: "Clear",
         geocoding: (count: number) => `Locating ${count} more ${count === 1 ? "stop" : "stops"}…`,
@@ -464,8 +498,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
             onPopupClose={() => setPreviewStopId((current) => (current === stop.id ? null : current))}
           />
         ))}
-        {stopPoints.length > 0 && <FitBounds points={stopPoints} />}
-        {selectedRouteLine.length > 1 && <FitBounds points={selectedRouteLine} />}
+        {mapFitPoints.length > 0 && <FitBounds points={mapFitPoints} />}
       </MapContainer>
       {ungeocodedCount > 0 && <p className="map-geocoding-note">{copy.geocoding(ungeocodedCount)}</p>}
       {stops.length > 0 && (
@@ -482,13 +515,18 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
                 <summary><span>{copy.travelMode}</span><b>{activeTravelMode.icon} {activeTravelMode.label}</b></summary>
                 <div className="map-travel-options">
                   {travelModes.map((mode) => (
-                    <label key={mode.value} className={travelProfile === mode.value ? "is-selected" : undefined}>
-                      <input type="radio" name="travel-profile" checked={travelProfile === mode.value} onChange={() => setTravelProfile(mode.value)} />
+                    <label
+                      key={mode.value}
+                      className={`${travelProfile === mode.value ? "is-selected" : ""}${supportedProfiles.includes(mode.value) ? "" : " is-disabled"}`.trim() || undefined}
+                      title={supportedProfiles.includes(mode.value) ? undefined : copy.unavailableMode}
+                    >
+                      <input type="radio" name="travel-profile" checked={travelProfile === mode.value} disabled={!supportedProfiles.includes(mode.value)} onChange={() => setTravelProfile(mode.value)} />
                       <span aria-hidden="true">{mode.icon}</span>{mode.label}
                     </label>
                   ))}
                 </div>
               </details>
+              {supportedProfiles.length === 1 && <p className="map-route-profile-note">{copy.unavailableMode}</p>}
               {routeStatus === "loading" && <p className="map-route-status">{copy.loadingRoute}</p>}
               {routeStatus === "error" && <p className="map-route-error">{copy.routeFailed}: {routeError}</p>}
               {selectedRoute && <p className="map-directions-leg">ORS: {selectedRoute.distanceKm.toFixed(1)} km · {Math.round(selectedRoute.durationMinutes)} min</p>}

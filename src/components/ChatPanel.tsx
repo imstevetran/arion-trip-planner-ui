@@ -103,6 +103,7 @@ export function ChatPanel({
   const [actionsUi, setActionsUi] = useState<Record<number, ActionsUiState>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastHistoryLength = useRef(0);
+  const requestInFlight = useRef(false);
 
   // Poll chat history so a backend-initiated disruption turn (see
   // trip-planner-api's chat/disruptionTurn.ts) shows up here without the
@@ -122,6 +123,11 @@ export function ChatPanel({
       try {
         const data = await apiGet<{ messages: ChatMessage[] }>(`/chat/${tripId}/history`);
         if (cancelled) return;
+        // A history request may have started before send() added its
+        // optimistic user message. Never let that stale response replace the
+        // in-flight turn; the next poll after the turn settles will reconcile
+        // against the server's completed history.
+        if (requestInFlight.current) return;
         if (data.messages.length !== lastHistoryLength.current) {
           lastHistoryLength.current = data.messages.length;
           setMessages(data.messages);
@@ -160,7 +166,8 @@ export function ChatPanel({
 
   async function send(overrideText?: string) {
     const text = (overrideText ?? draft).trim();
-    if (!text || busy) return;
+    if (!text || requestInFlight.current) return;
+    requestInFlight.current = true;
     if (overrideText === undefined) setDraft("");
     setMessages((current) => [...current, { role: "user", text }]);
     setBusy(true);
@@ -175,7 +182,11 @@ export function ChatPanel({
         message: text,
         locale,
         ...(turnstileToken ? { turnstileToken } : {}),
-      }, { timeoutMs: 120_000 });
+      // A tool-driven turn commonly needs two model calls: one to select and
+      // run tools, then another to turn their results into the final reply.
+      // The API allows each model call up to 180s, so the browser must not
+      // abort halfway through a still-valid backend turn.
+      }, { timeoutMs: 390_000 });
       setMessages((current) => [
         ...current,
         { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions, calendarSync: result.calendarSync },
@@ -189,6 +200,7 @@ export function ChatPanel({
         { role: "assistant", text: error instanceof Error ? error.message : String(error) },
       ]);
     } finally {
+      requestInFlight.current = false;
       setBusy(false);
     }
   }

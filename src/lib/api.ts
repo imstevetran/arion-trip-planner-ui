@@ -49,3 +49,64 @@ export function apiGet<T>(path: string): Promise<T> {
 export function apiPost<T>(path: string, body: unknown, options?: { timeoutMs?: number }): Promise<T> {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) }, options?.timeoutMs);
 }
+
+// POST /chat streams newline-delimited JSON instead of one JSON body (see
+// trip-planner-api's routes/chat.ts) — each line is either
+// {type:"progress",...} as the assistant's tool loop advances, or exactly
+// one final {type:"result",...} (or {type:"error",...}) before the stream
+// closes. onProgress fires for every progress line as it arrives, letting
+// ChatPanel show what's actually happening (e.g. "Searching flights…")
+// instead of a fixed spinner for the whole turn.
+export async function apiPostStream<TProgress, TResult>(
+  path: string,
+  body: unknown,
+  onProgress: (event: TProgress) => void,
+  options?: { timeoutMs?: number },
+): Promise<TResult> {
+  const controller = options?.timeoutMs ? new AbortController() : null;
+  const timeout = controller ? window.setTimeout(() => controller.abort(), options!.timeoutMs) : null;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: controller?.signal,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${FRONTEND_API_SECRET}` },
+    });
+    if (!response.ok || !response.body) {
+      const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(errorBody.error ?? `Request to ${path} failed (${response.status})`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: TResult | undefined;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        const event = JSON.parse(line) as { type: "progress" | "result" | "error"; [key: string]: unknown };
+        if (event.type === "progress") onProgress(event as TProgress);
+        else if (event.type === "result") result = event as TResult;
+        else if (event.type === "error") throw new Error(event.error as string);
+      }
+    }
+
+    if (!result) throw new Error("The assistant's response ended unexpectedly. Please try again.");
+    return result;
+  } catch (error) {
+    if (controller?.signal.aborted) {
+      throw new Error("The assistant took too long to respond. Please try again.");
+    }
+    throw error;
+  } finally {
+    if (timeout !== null) window.clearTimeout(timeout);
+  }
+}

@@ -78,6 +78,14 @@ export function BookingReview({ trip, bookings, locale, onChanged }: { trip: Tri
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (pending.length === 0) return null;
+  // Mirrors trip-planner-api's executeRealBooking gate — approveBooking
+  // throws MISSING_CUSTOMER_DETAILS server-side for these kinds without it,
+  // but catching that error is a worse experience than not letting the
+  // customer select it here in the first place. The actual form to fix it
+  // lives on the matching row in the Timeline (CustomerDetailsForm).
+  const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
+  const needsDetails = (kind: TripBooking["kind"]) =>
+    !hasCustomerDetails && (kind === "vehicle" || kind === "flight");
   const toggle = (id: string) => setSelected((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -95,7 +103,7 @@ export function BookingReview({ trip, bookings, locale, onChanged }: { trip: Tri
   }
   return <section className="trip-review-card booking-review" aria-labelledby="booking-review-title">
     <div className="trip-review-heading"><div><p className="eyebrow">{locale === "vi" ? "Xác nhận của bạn" : "Your approval"}</p><h2 id="booking-review-title">{locale === "vi" ? `Rà soát ${pending.length} dịch vụ trước khi đặt` : `Review ${pending.length} services before booking`}</h2></div></div>
-    <div className="booking-checks">{pending.map((booking) => <label key={booking.id}><input type="checkbox" checked={selected.has(booking.id)} onChange={() => toggle(booking.id)} /><span>{bookingLabel(booking, trip, locale)}</span><small>{booking.kind}</small></label>)}</div>
+    <div className="booking-checks">{pending.map((booking) => <label key={booking.id} className={needsDetails(booking.kind) ? "needs-details" : undefined}><input type="checkbox" checked={selected.has(booking.id)} disabled={needsDetails(booking.kind)} onChange={() => toggle(booking.id)} /><span>{bookingLabel(booking, trip, locale)}</span><small>{needsDetails(booking.kind) ? (locale === "vi" ? "cần điền thông tin người đi bên dưới" : "needs traveler details below") : booking.kind}</small></label>)}</div>
     <p className="cost-note">{locale === "vi" ? "Chỉ các mục bạn chọn mới được gửi để đặt. Hãy kiểm tra tổng tiền và điều kiện huỷ trong chat trước khi xác nhận." : "Only selected items will be booked. Check the total and cancellation terms in chat before confirming."}</p>
     {error && <p className="review-error">{error}</p>}
     <button className="btn approve" type="button" disabled={busy || selected.size === 0} onClick={() => void approveSelected()}>{busy ? "…" : (locale === "vi" ? `Duyệt ${selected.size || ""} dịch vụ đã chọn` : `Approve ${selected.size || ""} selected`)}</button>

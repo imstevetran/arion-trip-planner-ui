@@ -5,14 +5,17 @@ import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
 import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
 import { CalendarExportButton } from "./CalendarExportButton";
 import { ShareItineraryButton } from "./ShareItineraryButton";
+import { CustomerDetailsForm } from "./CustomerDetailsForm";
 import type {
   FleetVehicle,
   TripAccommodationOption,
   TripBooking,
+  TripBookingKind,
   TripDisruption,
   TripFlightOption,
   TripResource,
   TripRouteLeg,
+  TripVehicleOption,
 } from "../types";
 
 function formatVnd(amount: number): string {
@@ -45,12 +48,23 @@ function bookingFor(bookings: TripBooking[], key: keyof TripBooking, id: string)
   return bookings.find((booking) => booking[key] === id);
 }
 
+// Vehicle and flight bookings execute a real reservation/ticket under the
+// traveler's name (trip-planner-api's executeRealBooking) — accommodation
+// doesn't yet (Brave-search results are self-booked by the customer via a
+// link, not booked through us), so it's the only kind that doesn't need
+// this gate.
+const KINDS_REQUIRING_CUSTOMER_DETAILS: TripBookingKind[] = ["vehicle", "flight"];
+
 function ApprovalRow({
   booking,
+  kind,
+  hasCustomerDetails,
   locale,
   onChanged,
 }: {
   booking: TripBooking | undefined;
+  kind: TripBookingKind;
+  hasCustomerDetails: boolean;
   locale: Locale;
   onChanged: () => void;
 }) {
@@ -73,6 +87,10 @@ function ApprovalRow({
   if (booking.status === "failed") return <span className="status-pill warn">{t(locale, "failed")}</span>;
   if (booking.status !== "pending_approval" && booking.status !== "approved") return null;
 
+  if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(kind) && !hasCustomerDetails) {
+    return <CustomerDetailsForm locale={locale} onSaved={onChanged} />;
+  }
+
   return (
     <div className="stop-actions">
       <button className="btn approve" disabled={busy} onClick={() => act("approveBooking")}>
@@ -81,6 +99,48 @@ function ApprovalRow({
       <button className="btn reject" disabled={busy} onClick={() => act("rejectBooking")}>
         {t(locale, "reject")}
       </button>
+    </div>
+  );
+}
+
+// No ApprovalRow here, unlike AccommodationOptions — picking a vehicle
+// calls assignVehicle directly, which immediately creates the real
+// trip_vehicle_assignment row and stages its booking, so the existing
+// "assigned vehicle" block further down (keyed off trip.vehicleAssignment,
+// which has the actual assignment id ApprovalRow needs) already renders
+// the approve/reject controls once that shows up on the next poll.
+function VehicleOptions({
+  options,
+  locale,
+  onChanged,
+}: {
+  options: TripVehicleOption[];
+  locale: Locale;
+  onChanged: () => void;
+}) {
+  if (options.length === 0) return null;
+
+  return (
+    <div className="option-list">
+      {options.map((option) => (
+        <div key={option.id} className={`option-row${option.selected ? " selected" : ""}`}>
+          <span>
+            {option.vehicle ? `${option.vehicle.make} ${option.vehicle.model}` : "Vehicle"}
+            {` · ${formatVnd(option.estimated_daily_rate_vnd)}/day`}
+          </span>
+          {!option.selected && (
+            <button
+              type="button"
+              onClick={async () => {
+                await callTool("assignVehicle", { vehicleId: option.vehicle_id });
+                onChanged();
+              }}
+            >
+              {t(locale, "approve") === "Approve" ? "Select" : "Chọn"}
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -120,7 +180,7 @@ function AccommodationOptions({
           )}
         </div>
       ))}
-      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} locale={locale} onChanged={onChanged} />}
+      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} kind="accommodation" hasCustomerDetails locale={locale} onChanged={onChanged} />}
     </div>
   );
 }
@@ -149,6 +209,7 @@ export function Timeline({
   readOnly?: boolean;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
+  const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const days = trip.stops.reduce<Record<string, typeof trip.stops>>((groups, stop) => {
@@ -217,7 +278,7 @@ export function Timeline({
                   <div className="stop-meta mono">
                     {new Date(option.departure_time).toLocaleString()} → {new Date(option.arrival_time).toLocaleString()}
                   </div>
-                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} locale={locale} onChanged={onChanged} />}
+                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} kind="flight" hasCustomerDetails={hasCustomerDetails} locale={locale} onChanged={onChanged} />}
                 </div>
               </div>
             ))}
@@ -255,28 +316,34 @@ export function Timeline({
           </div>
         ))}
 
-        {trip.vehicleAssignment && (
+        {(trip.vehicleAssignment || trip.vehicleOptions.length > 0) && (
           <div className="day-group">
             <div className="section-title">Vehicle</div>
-            <div className="stop-card">
-              <div className="stop-icon">
-                <CarIcon />
-              </div>
-              <div className="stop-body">
-                <div className="stop-top">
-                  <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
-                  <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+            {trip.vehicleAssignment ? (
+              <div className="stop-card">
+                <div className="stop-icon">
+                  <CarIcon />
                 </div>
-                {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
-                  <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
-                )}
-                {!readOnly && <ApprovalRow
-                  booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
-                  locale={locale}
-                  onChanged={onChanged}
-                />}
+                <div className="stop-body">
+                  <div className="stop-top">
+                    <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
+                    <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+                  </div>
+                  {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
+                    <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
+                  )}
+                  {!readOnly && <ApprovalRow
+                    booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
+                    kind="vehicle"
+                    hasCustomerDetails={hasCustomerDetails}
+                    locale={locale}
+                    onChanged={onChanged}
+                  />}
+                </div>
               </div>
-            </div>
+            ) : (
+              !readOnly && <VehicleOptions options={trip.vehicleOptions} locale={locale} onChanged={onChanged} />
+            )}
           </div>
         )}
       </div>

@@ -14,6 +14,31 @@ export function renderInline(text: string, keyPrefix: string): ReactNode[] {
   );
 }
 
+// A GFM table row: "| a | b |" — split on unescaped pipes after trimming
+// the leading/trailing pipe. Cells with a literal "\|" aren't a case the
+// assistant's own output produces (see routeSuggestion.ts's system prompt),
+// so unescaping isn't handled — this only needs to parse what the model
+// actually emits, not arbitrary markdown input.
+function parseTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+// "| --- | :---: | ---: |" — every cell only dashes/colons. Requiring this
+// on the line right after a candidate header row is what tells a table
+// apart from a paragraph that merely starts and ends with "|" for some
+// unrelated reason.
+function isTableSeparatorRow(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return false;
+  const cells = parseTableRow(trimmed);
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
+}
+
 export function renderMarkdown(text: string): ReactNode {
   const blocks: ReactNode[] = [];
   let paragraphLines: string[] = [];
@@ -48,9 +73,12 @@ export function renderMarkdown(text: string): ReactNode {
     listItems = [];
   }
 
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
     const bulletMatch = /^[-*]\s+(.*)$/.exec(line);
+    const headingMatch = /^(#{1,6})\s+(.*)$/.exec(line);
+    const isTableHeader = line.startsWith("|") && line.endsWith("|") && isTableSeparatorRow(lines[i + 1] ?? "");
 
     if (line === "") {
       flushParagraph();
@@ -59,6 +87,50 @@ export function renderMarkdown(text: string): ReactNode {
       flushParagraph();
       flushList();
       blocks.push(<hr key={`hr-${blocks.length}`} className="md-hr" />);
+    } else if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = headingMatch[1].length;
+      const key = `h-${blocks.length}`;
+      blocks.push(
+        <p key={key} className={`md-h md-h${level}`}>
+          {renderInline(headingMatch[2], key)}
+        </p>,
+      );
+    } else if (isTableHeader) {
+      flushParagraph();
+      flushList();
+      const headerCells = parseTableRow(line);
+      const bodyRows: string[][] = [];
+      i += 2; // skip the header row (already read) and its separator row
+      while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+        bodyRows.push(parseTableRow(lines[i]));
+        i += 1;
+      }
+      i -= 1; // the outer loop's own increment accounts for the last row consumed
+      const key = `table-${blocks.length}`;
+      blocks.push(
+        <div key={key} className="md-table-wrap">
+          <table className="md-table">
+            <thead>
+              <tr>
+                {headerCells.map((cell, index) => (
+                  <th key={index}>{renderInline(cell, `${key}-h-${index}`)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {headerCells.map((_, cellIndex) => (
+                    <td key={cellIndex}>{renderInline(row[cellIndex] ?? "", `${key}-${rowIndex}-${cellIndex}`)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
     } else if (bulletMatch) {
       flushParagraph();
       listItems.push(bulletMatch[1]);

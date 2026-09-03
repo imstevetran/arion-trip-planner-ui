@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiPost } from "../lib/api";
-import { t, type Locale } from "../lib/i18n";
+import { apiGet, apiPostStream } from "../lib/api";
+import { STRINGS, t, type Locale } from "../lib/i18n";
 import { renderInline, renderMarkdown } from "../lib/markdown";
 import { SendIcon } from "./icons";
 import type { ChatMessage, SuggestedAction } from "../types";
@@ -12,6 +12,22 @@ type ChatTurnResponse = {
   suggestedActions?: SuggestedAction[];
   calendarSync?: ChatMessage["calendarSync"];
 };
+
+// Mirrors trip-planner-api's ChatProgressEvent (chat/agent.ts) — streamed
+// line-by-line over POST /chat (see lib/api.ts's apiPostStream) as the
+// assistant's tool loop advances.
+type ChatProgressEvent =
+  | { type: "progress"; stage: "thinking"; fallback?: true }
+  | { type: "progress"; stage: "tool"; tool: string };
+
+// A tool name the backend hasn't got a label for yet (or a human-gated one
+// like approveBooking that the chat loop never actually calls) falls back
+// to the generic "thinking" text rather than showing nothing or a raw
+// camelCase tool name to the customer.
+function toolStatusText(locale: Locale, tool: string): string {
+  const key = `toolStatus_${tool}` as keyof typeof STRINGS.en;
+  return STRINGS[locale][key] ?? t(locale, "thinking");
+}
 
 // Keyed by message index — ephemeral, per-render-only UI state for the
 // checkbox + Confirm/Cancel panel under a message's suggestedActions.
@@ -100,10 +116,34 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  // What the assistant is doing right now — driven live by the backend's
+  // stream of ChatProgressEvent lines (see agent.ts/routes/chat.ts), not
+  // guessed from elapsed time. Falls back to "thinking" before the first
+  // event of a turn arrives.
+  const [stage, setStage] = useState<
+    { kind: "tool"; tool: string } | { kind: "thinking"; fallback?: true }
+  >({ kind: "thinking" });
+  // Only used while stage is "thinking" with no tool name to show yet — a
+  // single model call can itself run up to ~180s (see llmClient.ts), and
+  // silently sitting on three dots that whole time reads as broken, not
+  // slow. Resets on every new stage (a fresh visible step earns a fresh
+  // budget of patience) rather than just once per turn.
+  const [thinkingTier, setThinkingTier] = useState<0 | 1 | 2>(0);
   const [actionsUi, setActionsUi] = useState<Record<number, ActionsUiState>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastHistoryLength = useRef(0);
   const requestInFlight = useRef(false);
+
+  useEffect(() => {
+    setThinkingTier(0);
+    if (!busy) return;
+    const slow = window.setTimeout(() => setThinkingTier(1), 6_000);
+    const verySlow = window.setTimeout(() => setThinkingTier(2), 20_000);
+    return () => {
+      window.clearTimeout(slow);
+      window.clearTimeout(verySlow);
+    };
+  }, [busy, stage]);
 
   // Poll chat history so a backend-initiated disruption turn (see
   // trip-planner-api's chat/disruptionTurn.ts) shows up here without the
@@ -170,6 +210,7 @@ export function ChatPanel({
     requestInFlight.current = true;
     if (overrideText === undefined) setDraft("");
     setMessages((current) => [...current, { role: "user", text }]);
+    setStage({ kind: "thinking" });
     setBusy(true);
     try {
       // Every message before a trip exists is a potential createTrip call —
@@ -177,16 +218,21 @@ export function ChatPanel({
       // narrowed to just the triggering turn. See trip-planner-api's
       // routes/chat.ts.
       const turnstileToken = !tripId ? await getTurnstileToken?.() : undefined;
-      const result = await apiPost<ChatTurnResponse>("/chat", {
-        tripId,
-        message: text,
-        locale,
-        ...(turnstileToken ? { turnstileToken } : {}),
-      // A tool-driven turn commonly needs two model calls: one to select and
-      // run tools, then another to turn their results into the final reply.
-      // The API allows each model call up to 180s, so the browser must not
-      // abort halfway through a still-valid backend turn.
-      }, { timeoutMs: 390_000 });
+      const result = await apiPostStream<ChatProgressEvent, ChatTurnResponse>(
+        "/chat",
+        { tripId, message: text, locale, ...(turnstileToken ? { turnstileToken } : {}) },
+        (event) =>
+          setStage(
+            event.stage === "tool"
+              ? { kind: "tool", tool: event.tool }
+              : { kind: "thinking", ...(event.fallback ? { fallback: true } : {}) },
+          ),
+        // A tool-driven turn commonly needs two model calls: one to select
+        // and run tools, then another to turn their results into the final
+        // reply. The API allows each model call up to 180s, so the browser
+        // must not abort halfway through a still-valid backend turn.
+        { timeoutMs: 390_000 },
+      );
       setMessages((current) => [
         ...current,
         { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions, calendarSync: result.calendarSync },
@@ -195,10 +241,13 @@ export function ChatPanel({
       if (result.tripId && result.tripId !== tripId) onTripIdChange(result.tripId);
       if (result.toolCalls.length > 0) onToolCallsExecuted();
     } catch (error) {
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", text: error instanceof Error ? error.message : String(error) },
-      ]);
+      // The raw error (e.g. "LLM gateway request failed (500): {...}") is
+      // real diagnostic detail, not something a customer should have to
+      // read as the assistant's "reply" — confirmed live, a customer
+      // reported the assistant "doesn't reply anything" when what actually
+      // happened was this exact JSON blob rendered in the bubble.
+      console.error("[chat] send failed:", error);
+      setMessages((current) => [...current, { role: "assistant", text: t(locale, "chatError") }]);
     } finally {
       requestInFlight.current = false;
       setBusy(false);
@@ -275,6 +324,13 @@ export function ChatPanel({
               <span />
               <span />
               <span />
+              <em className="typing-status">
+                {stage.kind === "tool"
+                  ? toolStatusText(locale, stage.tool)
+                  : stage.fallback
+                    ? t(locale, "thinkingFallback")
+                    : t(locale, thinkingTier === 2 ? "thinkingVerySlow" : thinkingTier === 1 ? "thinkingSlow" : "thinking")}
+              </em>
             </div>
           </div>
         )}

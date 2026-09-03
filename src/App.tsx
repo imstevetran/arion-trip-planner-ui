@@ -17,7 +17,9 @@ const LOCALE_STORAGE_KEY = "arion-trip-planner:locale";
 let toolsRegistered = false;
 
 export default function App() {
-  const [tripId, setTripId] = useState<string | null>(() => localStorage.getItem(TRIP_ID_STORAGE_KEY));
+  const sharedTripId = new URLSearchParams(window.location.search).get("share");
+  const isSharedView = Boolean(sharedTripId);
+  const [tripId, setTripId] = useState<string | null>(() => sharedTripId ?? localStorage.getItem(TRIP_ID_STORAGE_KEY));
   const [locale, setLocale] = useState<Locale>(() => (localStorage.getItem(LOCALE_STORAGE_KEY) as Locale) ?? "en");
   const [trip, setTrip] = useState<TripResource | null>(null);
   const [bookings, setBookings] = useState<TripBooking[]>([]);
@@ -54,8 +56,8 @@ export default function App() {
 
   useEffect(() => {
     setCurrentTripId(tripId);
-    if (tripId) localStorage.setItem(TRIP_ID_STORAGE_KEY, tripId);
-  }, [tripId]);
+    if (tripId && !isSharedView) localStorage.setItem(TRIP_ID_STORAGE_KEY, tripId);
+  }, [tripId, isSharedView]);
 
   useEffect(() => {
     setCurrentLocale(locale);
@@ -67,8 +69,8 @@ export default function App() {
     try {
       const [tripData, bookingsData, disruptionsData] = await Promise.all([
         apiGet<TripResource>(`/resources/trip/${tripId}`),
-        apiGet<{ bookings: TripBooking[] }>(`/resources/trip/${tripId}/bookings`),
-        apiGet<{ disruptions: TripDisruption[] }>(`/resources/trip/${tripId}/disruptions`),
+        isSharedView ? Promise.resolve({ bookings: [] }) : apiGet<{ bookings: TripBooking[] }>(`/resources/trip/${tripId}/bookings`),
+        isSharedView ? Promise.resolve({ disruptions: [] }) : apiGet<{ disruptions: TripDisruption[] }>(`/resources/trip/${tripId}/disruptions`),
       ]);
       setTrip(tripData);
       setBookings(bookingsData.bookings);
@@ -76,7 +78,7 @@ export default function App() {
     } catch {
       // transient — next refresh (poll or tool-triggered) will retry
     }
-  }, [tripId]);
+  }, [tripId, isSharedView]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -97,10 +99,11 @@ export default function App() {
   }, [tripId, refresh]);
 
   useEffect(() => {
+    if (isSharedView) return;
     apiGet<{ vehicles: FleetVehicle[] }>("/resources/fleet")
       .then((data) => setFleet(data.vehicles))
       .catch(() => setFleet([]));
-  }, []);
+  }, [isSharedView]);
 
   if (!tripId) {
     return <CreateTripEntry locale={locale} onLocaleChange={setLocale} onCreated={(id, message) => {
@@ -110,12 +113,23 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell mobile-${mobileView}${mobileChatOpen ? " mobile-chat-open" : ""}${desktopPlanOpen ? "" : " plan-collapsed"}`}>
+    <div className={`app-shell mobile-${mobileView}${mobileChatOpen ? " mobile-chat-open" : ""}${desktopPlanOpen ? "" : " plan-collapsed"}${isSharedView ? " shared-view" : ""}`}>
       <div className="mobile-nav" aria-label="Trip view">
         <button type="button" className={mobileView === "plan" ? "active" : ""} onClick={() => setMobileView("plan")}>Plan</button>
         <button type="button" className={mobileView === "map" ? "active" : ""} onClick={() => setMobileView("map")}>Map</button>
-        <button type="button" className="mobile-chat-trigger" onClick={() => setMobileChatOpen(true)}>Ask agent</button>
       </div>
+      {!isSharedView && <button
+        type="button"
+        className="mobile-chat-trigger"
+        aria-label="Ask agent"
+        title="Ask agent"
+        onClick={() => setMobileChatOpen(true)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 11.5a7.5 7.5 0 0 1-8 7.48 8.8 8.8 0 0 1-3.55-.92L4 20l1.32-3.95A7.36 7.36 0 0 1 4 11.5a7.5 7.5 0 0 1 8-7.48 7.5 7.5 0 0 1 8 7.48Z" />
+          <path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01" />
+        </svg>
+      </button>}
       <div className="map-column">
         <RouteMap trip={trip} locale={locale} />
         <button type="button" className="desktop-plan-toggle" onClick={() => setDesktopPlanOpen((open) => !open)}>
@@ -124,15 +138,15 @@ export default function App() {
       </div>
       {trip ? (
         <div className="app-main">
-          {trip.trip.status === "draft" || trip.trip.status === "planning" ? <PlanOptions locale={locale} onChoose={openAssistantWithMessage} /> : null}
-          <Timeline trip={trip} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={openAssistantWithMessage} embedded />
+          {!isSharedView && (trip.trip.status === "draft" || trip.trip.status === "planning") ? <PlanOptions locale={locale} onChoose={openAssistantWithMessage} /> : null}
+          <Timeline trip={trip} tripId={tripId} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={openAssistantWithMessage} embedded readOnly={isSharedView} />
         </div>
       ) : (
         <div className="app-main">
           <p className="empty-hint">Loading…</p>
         </div>
       )}
-      <div className="chat-column">
+      {!isSharedView && <div className="chat-column">
         <button type="button" className="mobile-chat-close" onClick={() => setMobileChatOpen(false)}>Close</button>
         <ChatPanel
           tripId={tripId}
@@ -144,7 +158,7 @@ export default function App() {
           onStartNewTrip={leaveCurrentTrip}
           onCloseTrip={leaveCurrentTrip}
         />
-      </div>
+      </div>}
     </div>
   );
 }

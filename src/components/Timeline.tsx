@@ -4,6 +4,7 @@ import { t, type Locale } from "../lib/i18n";
 import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
 import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
 import { CalendarExportButton } from "./CalendarExportButton";
+import { ShareItineraryButton } from "./ShareItineraryButton";
 import type {
   FleetVehicle,
   TripAccommodationOption,
@@ -126,6 +127,7 @@ function AccommodationOptions({
 
 export function Timeline({
   trip,
+  tripId,
   bookings,
   disruptions,
   fleet,
@@ -133,8 +135,10 @@ export function Timeline({
   onChanged,
   embedded = false,
   onAskAssistant,
+  readOnly = false,
 }: {
   trip: TripResource;
+  tripId: string;
   bookings: TripBooking[];
   disruptions: TripDisruption[];
   fleet: FleetVehicle[];
@@ -142,6 +146,7 @@ export function Timeline({
   onChanged: () => void;
   embedded?: boolean;
   onAskAssistant: (message: string) => void;
+  readOnly?: boolean;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
@@ -162,7 +167,8 @@ export function Timeline({
           </p>
         </div>
         <div className="topbar-actions">
-          {trip.trip.status !== "draft" && trip.trip.status !== "planning" && <CalendarExportButton trip={trip} locale={locale} />}
+          {!readOnly && <ShareItineraryButton tripId={tripId} destination={trip.trip.destination_query} locale={locale} />}
+          {!readOnly && trip.trip.status !== "draft" && trip.trip.status !== "planning" && <CalendarExportButton trip={trip} locale={locale} />}
           <div className="budget-block">
           <div className="budget-label">{t(locale, "budgetUsed")}</div>
           <div className="budget-figs mono">
@@ -184,11 +190,11 @@ export function Timeline({
         </div>
       )}
 
-      <div className="trip-review-grid">
+      {!readOnly && <div className="trip-review-grid">
         <FeasibilityReview trip={trip} locale={locale} onAskAssistant={onAskAssistant} />
         <CostBreakdown trip={trip} locale={locale} onAskAssistant={onAskAssistant} />
-      </div>
-      <BookingReview trip={trip} bookings={bookings} locale={locale} onChanged={onChanged} />
+      </div>}
+      {!readOnly && <BookingReview trip={trip} bookings={bookings} locale={locale} onChanged={onChanged} />}
 
       <div className="timeline-scroll">
         {trip.trip.needs_flight && selectedFlights.length > 0 && (
@@ -211,7 +217,7 @@ export function Timeline({
                   <div className="stop-meta mono">
                     {new Date(option.departure_time).toLocaleString()} → {new Date(option.arrival_time).toLocaleString()}
                   </div>
-                  <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} locale={locale} onChanged={onChanged} />
+                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} locale={locale} onChanged={onChanged} />}
                 </div>
               </div>
             ))}
@@ -236,9 +242,9 @@ export function Timeline({
                         {stop.expected_duration_hours && <span className="mono stop-meta">{stop.expected_duration_hours}h</span>}
                       </div>
                       <AccommodationOptions
-                        options={trip.accommodationOptions.filter((option) => option.trip_stop_id === stop.id)}
+                        options={trip.accommodationOptions.filter((option) => option.trip_stop_id === stop.id && (!readOnly || option.selected))}
                         locale={locale}
-                        bookings={bookings}
+                        bookings={readOnly ? [] : bookings}
                         onChanged={onChanged}
                       />
                     </div>
@@ -264,11 +270,11 @@ export function Timeline({
                 {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
                   <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
                 )}
-                <ApprovalRow
+                {!readOnly && <ApprovalRow
                   booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
                   locale={locale}
                   onChanged={onChanged}
-                />
+                />}
               </div>
             </div>
           </div>

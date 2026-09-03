@@ -5,10 +5,12 @@ import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
 import { BookingReview, CostBreakdown, FeasibilityReview } from "./TripReview";
 import { CalendarExportButton } from "./CalendarExportButton";
 import { ShareItineraryButton } from "./ShareItineraryButton";
+import { CustomerDetailsForm } from "./CustomerDetailsForm";
 import type {
   FleetVehicle,
   TripAccommodationOption,
   TripBooking,
+  TripBookingKind,
   TripDisruption,
   TripFlightOption,
   TripResource,
@@ -45,12 +47,23 @@ function bookingFor(bookings: TripBooking[], key: keyof TripBooking, id: string)
   return bookings.find((booking) => booking[key] === id);
 }
 
+// Vehicle and flight bookings execute a real reservation/ticket under the
+// traveler's name (trip-planner-api's executeRealBooking) — accommodation
+// doesn't yet (Brave-search results are self-booked by the customer via a
+// link, not booked through us), so it's the only kind that doesn't need
+// this gate.
+const KINDS_REQUIRING_CUSTOMER_DETAILS: TripBookingKind[] = ["vehicle", "flight"];
+
 function ApprovalRow({
   booking,
+  kind,
+  hasCustomerDetails,
   locale,
   onChanged,
 }: {
   booking: TripBooking | undefined;
+  kind: TripBookingKind;
+  hasCustomerDetails: boolean;
   locale: Locale;
   onChanged: () => void;
 }) {
@@ -72,6 +85,10 @@ function ApprovalRow({
   if (booking.status === "rejected") return <span className="status-pill warn">{t(locale, "rejected")}</span>;
   if (booking.status === "failed") return <span className="status-pill warn">{t(locale, "failed")}</span>;
   if (booking.status !== "pending_approval" && booking.status !== "approved") return null;
+
+  if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(kind) && !hasCustomerDetails) {
+    return <CustomerDetailsForm locale={locale} onSaved={onChanged} />;
+  }
 
   return (
     <div className="stop-actions">
@@ -120,7 +137,7 @@ function AccommodationOptions({
           )}
         </div>
       ))}
-      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} locale={locale} onChanged={onChanged} />}
+      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} kind="accommodation" hasCustomerDetails locale={locale} onChanged={onChanged} />}
     </div>
   );
 }
@@ -149,6 +166,7 @@ export function Timeline({
   readOnly?: boolean;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
+  const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const days = trip.stops.reduce<Record<string, typeof trip.stops>>((groups, stop) => {
@@ -217,7 +235,7 @@ export function Timeline({
                   <div className="stop-meta mono">
                     {new Date(option.departure_time).toLocaleString()} → {new Date(option.arrival_time).toLocaleString()}
                   </div>
-                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} locale={locale} onChanged={onChanged} />}
+                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} kind="flight" hasCustomerDetails={hasCustomerDetails} locale={locale} onChanged={onChanged} />}
                 </div>
               </div>
             ))}
@@ -272,6 +290,8 @@ export function Timeline({
                 )}
                 {!readOnly && <ApprovalRow
                   booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
+                  kind="vehicle"
+                  hasCustomerDetails={hasCustomerDetails}
                   locale={locale}
                   onChanged={onChanged}
                 />}

@@ -100,10 +100,29 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [thinkingStage, setThinkingStage] = useState<"thinking" | "thinkingSlow" | "thinkingVerySlow">("thinking");
   const [actionsUi, setActionsUi] = useState<Record<number, ActionsUiState>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastHistoryLength = useRef(0);
   const requestInFlight = useRef(false);
+
+  // A tool-driven turn can legitimately take well over the default
+  // spinner's worth of patience (up to two chained ~180s model calls
+  // server-side — see agent.ts) — silently sitting on three dots for that
+  // long reads as broken, not slow. These thresholds escalate the message
+  // instead of just spinning, so the customer knows it's still working.
+  useEffect(() => {
+    if (!busy) {
+      setThinkingStage("thinking");
+      return;
+    }
+    const slow = window.setTimeout(() => setThinkingStage("thinkingSlow"), 6_000);
+    const verySlow = window.setTimeout(() => setThinkingStage("thinkingVerySlow"), 20_000);
+    return () => {
+      window.clearTimeout(slow);
+      window.clearTimeout(verySlow);
+    };
+  }, [busy]);
 
   // Poll chat history so a backend-initiated disruption turn (see
   // trip-planner-api's chat/disruptionTurn.ts) shows up here without the
@@ -278,6 +297,7 @@ export function ChatPanel({
               <span />
               <span />
               <span />
+              <em className="typing-status">{t(locale, thinkingStage)}</em>
             </div>
           </div>
         )}

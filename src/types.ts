@@ -16,6 +16,15 @@ export type Trip = {
   start_date: string;
   end_date: string;
   status: TripStatus;
+  // Real traveler contact details, captured via CustomerDetailsForm — see
+  // setCustomerDetails in trip-planner-api. Required before a vehicle or
+  // flight booking can be approved (Timeline.tsx gates the Approve button
+  // on customer_full_name/customer_phone being set).
+  customer_full_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_date_of_birth: string | null;
+  customer_nationality: string;
 };
 
 export type TripStop = {

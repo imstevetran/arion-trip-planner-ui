@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { t, type Locale } from "../lib/i18n";
 import { suggestionLabel, suggestionToChatMessage, TRIP_SUGGESTIONS, type TripSuggestion } from "../lib/tripSuggestions";
 import { useTurnstileToken } from "../lib/turnstile";
+import { apiGet } from "../lib/api";
 import { CreateTripForm } from "./CreateTripForm";
 import { ChatPanel } from "./ChatPanel";
 
@@ -30,8 +31,21 @@ export function CreateTripEntry({
   const [chatMessage, setChatMessage] = useState<string | null>(null);
   // One shared widget for this whole screen (not one per mode) — createTrip
   // is the single action being gated here, regardless of which mode the
-  // customer used to trigger it. See lib/turnstile.ts.
-  const { containerRef: turnstileRef, getToken: getTurnstileToken } = useTurnstileToken("create-trip");
+  // customer used to trigger it. See lib/turnstile.ts. The hook always
+  // runs (React hooks can't be conditional), but whether its widget
+  // actually renders — and whether callers even bother waiting on a token —
+  // depends on turnstileEnabled below.
+  const { containerRef: turnstileRef, getToken: realGetTurnstileToken } = useTurnstileToken("create-trip");
+  // Server-only (TURNSTILE_DISABLED is a secret, not shippable to the
+  // client) — defaults to true (assume enabled) until this resolves, so a
+  // slow /config response never skips a check that's actually still on.
+  const [turnstileEnabled, setTurnstileEnabled] = useState(true);
+  useEffect(() => {
+    apiGet<{ turnstileEnabled: boolean }>("/config")
+      .then((data) => setTurnstileEnabled(data.turnstileEnabled))
+      .catch(() => {});
+  }, []);
+  const getTurnstileToken = turnstileEnabled ? realGetTurnstileToken : () => Promise.resolve("");
 
   function applySuggestion(suggestion: TripSuggestion) {
     if (mode === "form") {
@@ -92,8 +106,11 @@ export function CreateTripEntry({
         </div>
       )}
       {/* Managed mode: normally invisible, occasionally shows an interactive
-          checkbox here if Cloudflare's risk engine wants one. */}
-      <div ref={turnstileRef} className="turnstile-widget" />
+          checkbox here if Cloudflare's risk engine wants one. Not rendered
+          at all once /config says the backend isn't enforcing it anyway —
+          otherwise the widget kept showing (and getToken() kept getting
+          awaited, if only up to its own timeout) for no reason. */}
+      {turnstileEnabled && <div ref={turnstileRef} className="turnstile-widget" />}
     </div>
   );
 }

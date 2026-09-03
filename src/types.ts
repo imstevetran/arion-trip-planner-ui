@@ -25,6 +25,11 @@ export type Trip = {
   customer_phone: string | null;
   customer_date_of_birth: string | null;
   customer_nationality: string;
+  // Who's actually traveling — the assistant asks for this in chat and
+  // calls setPartyComposition; searchAccommodation/searchFlights refuse
+  // until it's set. null adults means "not asked yet".
+  party_adults: number | null;
+  party_children_ages: number[];
 };
 
 export type TripStop = {
@@ -70,6 +75,20 @@ export type TripVehicleAssignment = {
   arion_booking_id: string | null;
 };
 
+export type TripVehicleOption = {
+  id: string;
+  vehicle_id: string;
+  estimated_daily_rate_vnd: number;
+  selected: boolean;
+  vehicle: {
+    id: string;
+    license_plate: string;
+    make: string;
+    model: string;
+    current_location: string | null;
+  } | null;
+};
+
 export type TripBookingKind = "vehicle" | "accommodation" | "flight";
 export type TripBookingStatus = "pending_approval" | "approved" | "booking" | "booked" | "failed" | "rejected";
 
@@ -105,6 +124,7 @@ export type TripResource = {
   flightOptions: TripFlightOption[];
   accommodationOptions: TripAccommodationOption[];
   vehicleAssignment: TripVehicleAssignment | null;
+  vehicleOptions: TripVehicleOption[];
   calendar: {
     provider: "google";
     syncedEventCount: number;

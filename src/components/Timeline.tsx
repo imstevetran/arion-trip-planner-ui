@@ -15,6 +15,7 @@ import type {
   TripFlightOption,
   TripResource,
   TripRouteLeg,
+  TripVehicleOption,
 } from "../types";
 
 function formatVnd(amount: number): string {
@@ -98,6 +99,48 @@ function ApprovalRow({
       <button className="btn reject" disabled={busy} onClick={() => act("rejectBooking")}>
         {t(locale, "reject")}
       </button>
+    </div>
+  );
+}
+
+// No ApprovalRow here, unlike AccommodationOptions — picking a vehicle
+// calls assignVehicle directly, which immediately creates the real
+// trip_vehicle_assignment row and stages its booking, so the existing
+// "assigned vehicle" block further down (keyed off trip.vehicleAssignment,
+// which has the actual assignment id ApprovalRow needs) already renders
+// the approve/reject controls once that shows up on the next poll.
+function VehicleOptions({
+  options,
+  locale,
+  onChanged,
+}: {
+  options: TripVehicleOption[];
+  locale: Locale;
+  onChanged: () => void;
+}) {
+  if (options.length === 0) return null;
+
+  return (
+    <div className="option-list">
+      {options.map((option) => (
+        <div key={option.id} className={`option-row${option.selected ? " selected" : ""}`}>
+          <span>
+            {option.vehicle ? `${option.vehicle.make} ${option.vehicle.model}` : "Vehicle"}
+            {` · ${formatVnd(option.estimated_daily_rate_vnd)}/day`}
+          </span>
+          {!option.selected && (
+            <button
+              type="button"
+              onClick={async () => {
+                await callTool("assignVehicle", { vehicleId: option.vehicle_id });
+                onChanged();
+              }}
+            >
+              {t(locale, "approve") === "Approve" ? "Select" : "Chọn"}
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -273,30 +316,34 @@ export function Timeline({
           </div>
         ))}
 
-        {trip.vehicleAssignment && (
+        {(trip.vehicleAssignment || trip.vehicleOptions.length > 0) && (
           <div className="day-group">
             <div className="section-title">Vehicle</div>
-            <div className="stop-card">
-              <div className="stop-icon">
-                <CarIcon />
-              </div>
-              <div className="stop-body">
-                <div className="stop-top">
-                  <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
-                  <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+            {trip.vehicleAssignment ? (
+              <div className="stop-card">
+                <div className="stop-icon">
+                  <CarIcon />
                 </div>
-                {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
-                  <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
-                )}
-                {!readOnly && <ApprovalRow
-                  booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
-                  kind="vehicle"
-                  hasCustomerDetails={hasCustomerDetails}
-                  locale={locale}
-                  onChanged={onChanged}
-                />}
+                <div className="stop-body">
+                  <div className="stop-top">
+                    <span className="stop-name">{vehicle ? `${vehicle.make} ${vehicle.model} · ${vehicle.license_plate}` : "Vehicle"}</span>
+                    <span className="mono stop-meta">{formatVnd(trip.vehicleAssignment.estimated_daily_rate_vnd)}/day</span>
+                  </div>
+                  {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
+                    <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
+                  )}
+                  {!readOnly && <ApprovalRow
+                    booking={bookingFor(bookings, "trip_vehicle_assignment_id", trip.vehicleAssignment.id)}
+                    kind="vehicle"
+                    hasCustomerDetails={hasCustomerDetails}
+                    locale={locale}
+                    onChanged={onChanged}
+                  />}
+                </div>
               </div>
-            </div>
+            ) : (
+              !readOnly && <VehicleOptions options={trip.vehicleOptions} locale={locale} onChanged={onChanged} />
+            )}
           </div>
         )}
       </div>

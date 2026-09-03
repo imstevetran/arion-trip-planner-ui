@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // TURNSTILE_SECRET.
 const SITEKEY = "0x4AAAAAAEk82PaI3493dUE-";
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+const TOKEN_TIMEOUT_MS = 10_000;
 
 type TurnstileApi = {
   render: (
@@ -93,6 +94,16 @@ export function useTurnstileToken(action: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action]);
 
+  // A client that can never complete an interactive challenge (a headless
+  // browser, an automated agent) would otherwise await this forever — the
+  // widget's callback simply never fires, so nothing here would time out on
+  // its own. Bounded to TOKEN_TIMEOUT_MS so the caller always eventually
+  // gets *something* and can send its request; an empty string still fails
+  // trip-planner-api's own verifyTurnstileToken check (its length===0
+  // guard), so this only actually lets a request through when the server
+  // has separately turned that check off (TURNSTILE_DISABLED) — a real
+  // human who hasn't finished clicking the checkbox yet just gets a 403
+  // "try again" the same as before, not a bypass.
   const getToken = useCallback((): Promise<string> => {
     const available = availableTokenRef.current;
     if (available) {
@@ -101,7 +112,16 @@ export function useTurnstileToken(action: string) {
       return Promise.resolve(consumeAndReset(available));
     }
     return new Promise((resolve) => {
-      pendingResolversRef.current = [...pendingResolversRef.current, resolve];
+      let settled = false;
+      const settle = (token: string) => {
+        if (settled) return;
+        settled = true;
+        pendingResolversRef.current = pendingResolversRef.current.filter((r) => r !== wrappedResolve);
+        resolve(token);
+      };
+      const wrappedResolve = (token: string) => settle(token);
+      pendingResolversRef.current = [...pendingResolversRef.current, wrappedResolve];
+      window.setTimeout(() => settle(""), TOKEN_TIMEOUT_MS);
     });
   }, [consumeAndReset]);
 

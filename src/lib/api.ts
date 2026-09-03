@@ -10,7 +10,11 @@ export const API_BASE_URL = (import.meta.env.VITE_TRIP_PLANNER_API_URL as string
 // protection against a targeted attacker. Falls back to the same default
 // trip-planner-api itself defaults to, so local dev works without setting
 // anything.
-const FRONTEND_API_SECRET =
+// Exported for lib/openRouteService.ts, which hand-rolls its own fetch()
+// (rather than going through request() below) so it can inspect a failed
+// response's body before deciding whether to retry — apiPost/apiGet throw
+// immediately on a non-ok response, which would lose that.
+export const FRONTEND_API_SECRET =
   (import.meta.env.VITE_TRIP_PLANNER_API_SECRET as string | undefined) ?? "local-dev-frontend-secret";
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {

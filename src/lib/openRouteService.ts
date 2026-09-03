@@ -1,8 +1,12 @@
-// Same-origin by default: Vite proxies /ors in development, avoiding ORS's
-// browser CORS rejection and keeping the API key out of the JS bundle.
-// Deployments can point this at an equivalent server-side proxy endpoint.
-const ORS_DIRECTIONS_URL =
-  (import.meta.env.VITE_ORS_DIRECTIONS_URL as string | undefined) ?? "/ors/v2/directions";
+import { API_BASE_URL, FRONTEND_API_SECRET } from "./api.js";
+
+// trip-planner-api's own /routing/preview/:profile (routes/routing.ts) — a
+// thin, authenticated passthrough to ORS that keeps the ORS API key out of
+// this bundle entirely, same reasoning api.ts's requests already follow.
+// This used to default to a same-origin /ors/... path that only Vite's dev
+// proxy (vite.config.ts) ever answered; the deployed static site has
+// nothing listening there, so every request 405'd once this shipped.
+const ORS_DIRECTIONS_URL = `${API_BASE_URL}/routing/preview`;
 
 export type OrsTravelProfile = "driving-car" | "foot-walking" | "cycling-regular" | "cycling-electric" | "foot-hiking";
 
@@ -25,7 +29,10 @@ type OrsGeoJsonResponse = {
 };
 
 export async function fetchOrsProfiles(signal: AbortSignal): Promise<OrsTravelProfile[]> {
-  const response = await fetch("/ors/v2/status", { signal, headers: { Accept: "application/json" } });
+  const response = await fetch(`${API_BASE_URL}/routing/status`, {
+    signal,
+    headers: { Accept: "application/json", Authorization: `Bearer ${FRONTEND_API_SECRET}` },
+  });
   const body = (await response.json().catch(() => ({}))) as OrsStatusResponse;
   if (!response.ok || !body.profiles) throw new Error(`OpenRouteService status failed (${response.status})`);
   return Object.keys(body.profiles).filter((profile): profile is OrsTravelProfile =>
@@ -40,10 +47,14 @@ export async function fetchOrsRoute(
   signal: AbortSignal,
 ): Promise<OrsRoute> {
   async function request(snapRadius: number) {
-    const response = await fetch(`${ORS_DIRECTIONS_URL}/${profile}/geojson`, {
+    const response = await fetch(`${ORS_DIRECTIONS_URL}/${profile}`, {
       method: "POST",
       signal,
-      headers: { Accept: "application/geo+json, application/json", "Content-Type": "application/json" },
+      headers: {
+        Accept: "application/geo+json, application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${FRONTEND_API_SECRET}`,
+      },
       body: JSON.stringify({
         coordinates: [from, to],
         radiuses: [snapRadius, snapRadius],

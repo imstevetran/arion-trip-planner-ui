@@ -175,7 +175,7 @@ export function ChatPanel({
         message: text,
         locale,
         ...(turnstileToken ? { turnstileToken } : {}),
-      });
+      }, { timeoutMs: 120_000 });
       setMessages((current) => [
         ...current,
         { role: "assistant", text: result.reply, suggestedActions: result.suggestedActions, calendarSync: result.calendarSync },

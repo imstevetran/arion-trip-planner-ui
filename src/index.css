@@ -370,7 +370,8 @@ body { overflow: hidden; }
   .day-label { top: 58px; }
   .chat-column { position: absolute; z-index: 1100; inset: auto 0 0; height: min(70dvh, 610px); display: flex; border: 1px solid var(--border); border-bottom: 0; border-radius: 18px 18px 0 0; box-shadow: 0 -14px 40px rgba(12,20,33,.16); transform: translateY(calc(100% + 4px)); transition: transform .24s ease; }
   .mobile-chat-open .chat-column { transform: translateY(0); }
-  .mobile-chat-close { position: absolute; z-index: 2; top: 9px; right: 10px; display: block; border: 0; background: var(--muted); color: var(--muted-foreground); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .mobile-chat-close { position: absolute; z-index: 2; top: 16px; right: 10px; display: block; border: 0; background: var(--muted); color: var(--muted-foreground); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .chat-column .chat-trip-actions .close-trip { display: none; }
   .chat-head { padding-right: 64px; }
   .desktop-plan-toggle { display: none; }
   .plan-collapsed .app-main { display: flex; }

@@ -38,6 +38,11 @@ export default function App() {
     setMobileChatOpen(false);
   }
 
+  function openAssistantWithMessage(message: string) {
+    setAssistantMessage(message);
+    setMobileChatOpen(true);
+  }
+
   // Registered once, module-scoped guard so React StrictMode's double-invoke
   // in dev doesn't register every tool twice.
   useEffect(() => {
@@ -119,8 +124,8 @@ export default function App() {
       </div>
       {trip ? (
         <div className="app-main">
-          {trip.trip.status === "draft" || trip.trip.status === "planning" ? <PlanOptions locale={locale} onChoose={setAssistantMessage} /> : null}
-          <Timeline trip={trip} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={setAssistantMessage} embedded />
+          {trip.trip.status === "draft" || trip.trip.status === "planning" ? <PlanOptions locale={locale} onChoose={openAssistantWithMessage} /> : null}
+          <Timeline trip={trip} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={openAssistantWithMessage} embedded />
         </div>
       ) : (
         <div className="app-main">

@@ -21,7 +21,7 @@ type OrsGeoJsonResponse = {
     geometry?: { coordinates?: Array<[number, number]> };
     properties?: { summary?: { distance?: number; duration?: number } };
   }>;
-  error?: { message?: string } | string;
+  error?: { code?: number; message?: string } | string;
 };
 
 export async function fetchOrsProfiles(signal: AbortSignal): Promise<OrsTravelProfile[]> {
@@ -39,17 +39,30 @@ export async function fetchOrsRoute(
   profile: OrsTravelProfile,
   signal: AbortSignal,
 ): Promise<OrsRoute> {
-  const response = await fetch(`${ORS_DIRECTIONS_URL}/${profile}/geojson`, {
-    method: "POST",
-    signal,
-    headers: { Accept: "application/geo+json, application/json", "Content-Type": "application/json" },
-    // Geocoders often return the centre of a large attraction rather than
-    // its roadside entrance. The self-hosted engine accepts a wider search
-    // radius, preventing otherwise valid POIs from failing at its 400 m
-    // default snap distance (for example Marble Mountains).
-    body: JSON.stringify({ coordinates: [from, to], radiuses: [2_000, 2_000] }),
-  });
-  const body = (await response.json().catch(() => ({}))) as OrsGeoJsonResponse;
+  async function request(snapRadius: number) {
+    const response = await fetch(`${ORS_DIRECTIONS_URL}/${profile}/geojson`, {
+      method: "POST",
+      signal,
+      headers: { Accept: "application/geo+json, application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coordinates: [from, to],
+        radiuses: [snapRadius, snapRadius],
+        // ORS otherwise defaults to recommended/fastest. For an explicitly
+        // selected A-to-B route the product requirement is minimum distance.
+        preference: "shortest",
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as OrsGeoJsonResponse;
+    return { response, body };
+  }
+
+  // Keep endpoints attached to roads close to their marker. Only broaden
+  // the search for large POIs whose geocoded centre has no road within the
+  // self-hosted engine's normal 400 m snapping radius.
+  let { response, body } = await request(400);
+  if (!response.ok && typeof body.error !== "string" && body.error?.code === 2010) {
+    ({ response, body } = await request(2_000));
+  }
   const feature = body.features?.[0];
   const coordinates = feature?.geometry?.coordinates;
   const summary = feature?.properties?.summary;

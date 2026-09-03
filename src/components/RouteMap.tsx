@@ -512,7 +512,10 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
                 <p><span className="map-directions-label destination">B</span><b>{copy.destination}</b> {selectedStops[1].place_name}</p>
               </div>
               <details className="map-travel-mode">
-                <summary><span>{copy.travelMode}</span><b>{activeTravelMode.icon} {activeTravelMode.label}</b></summary>
+                <summary>
+                  <span>{copy.travelMode}</span>
+                  <b className="map-travel-current"><span className="map-travel-icon" aria-hidden="true">{activeTravelMode.icon}</span>{activeTravelMode.label}</b>
+                </summary>
                 <div className="map-travel-options">
                   {travelModes.map((mode) => (
                     <label
@@ -521,7 +524,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
                       title={supportedProfiles.includes(mode.value) ? undefined : copy.unavailableMode}
                     >
                       <input type="radio" name="travel-profile" checked={travelProfile === mode.value} disabled={!supportedProfiles.includes(mode.value)} onChange={() => setTravelProfile(mode.value)} />
-                      <span aria-hidden="true">{mode.icon}</span>{mode.label}
+                      <span className="map-travel-icon" aria-hidden="true">{mode.icon}</span>{mode.label}
                     </label>
                   ))}
                 </div>

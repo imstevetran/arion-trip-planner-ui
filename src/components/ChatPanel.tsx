@@ -16,7 +16,9 @@ type ChatTurnResponse = {
 // Mirrors trip-planner-api's ChatProgressEvent (chat/agent.ts) — streamed
 // line-by-line over POST /chat (see lib/api.ts's apiPostStream) as the
 // assistant's tool loop advances.
-type ChatProgressEvent = { type: "progress"; stage: "thinking" } | { type: "progress"; stage: "tool"; tool: string };
+type ChatProgressEvent =
+  | { type: "progress"; stage: "thinking"; fallback?: true }
+  | { type: "progress"; stage: "tool"; tool: string };
 
 // A tool name the backend hasn't got a label for yet (or a human-gated one
 // like approveBooking that the chat loop never actually calls) falls back
@@ -118,7 +120,9 @@ export function ChatPanel({
   // stream of ChatProgressEvent lines (see agent.ts/routes/chat.ts), not
   // guessed from elapsed time. Falls back to "thinking" before the first
   // event of a turn arrives.
-  const [stage, setStage] = useState<{ kind: "tool"; tool: string } | { kind: "thinking" }>({ kind: "thinking" });
+  const [stage, setStage] = useState<
+    { kind: "tool"; tool: string } | { kind: "thinking"; fallback?: true }
+  >({ kind: "thinking" });
   // Only used while stage is "thinking" with no tool name to show yet — a
   // single model call can itself run up to ~180s (see llmClient.ts), and
   // silently sitting on three dots that whole time reads as broken, not
@@ -217,7 +221,12 @@ export function ChatPanel({
       const result = await apiPostStream<ChatProgressEvent, ChatTurnResponse>(
         "/chat",
         { tripId, message: text, locale, ...(turnstileToken ? { turnstileToken } : {}) },
-        (event) => setStage(event.stage === "tool" ? { kind: "tool", tool: event.tool } : { kind: "thinking" }),
+        (event) =>
+          setStage(
+            event.stage === "tool"
+              ? { kind: "tool", tool: event.tool }
+              : { kind: "thinking", ...(event.fallback ? { fallback: true } : {}) },
+          ),
         // A tool-driven turn commonly needs two model calls: one to select
         // and run tools, then another to turn their results into the final
         // reply. The API allows each model call up to 180s, so the browser
@@ -318,7 +327,9 @@ export function ChatPanel({
               <em className="typing-status">
                 {stage.kind === "tool"
                   ? toolStatusText(locale, stage.tool)
-                  : t(locale, thinkingTier === 2 ? "thinkingVerySlow" : thinkingTier === 1 ? "thinkingSlow" : "thinking")}
+                  : stage.fallback
+                    ? t(locale, "thinkingFallback")
+                    : t(locale, thinkingTier === 2 ? "thinkingVerySlow" : thinkingTier === 1 ? "thinkingSlow" : "thinking")}
               </em>
             </div>
           </div>

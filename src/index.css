@@ -360,7 +360,11 @@ body { overflow: hidden; }
 .app-shell.shared-view { grid-template-columns: minmax(270px, 28vw) minmax(0, 1fr); }
 .timeline-scroll { max-width: 980px; width: 100%; margin: 0 auto; padding: 18px 24px 32px; gap: 18px; }
 .day-group { position: relative; gap: 8px; }
-.day-label { position: sticky; top: 76px; z-index: 1; width: fit-content; padding: 4px 8px; border-radius: 5px; background: #f6f7f4; box-shadow: 0 0 0 4px #f6f7f4; font-size: 12px; }
+/* top tracks the sticky .app-topbar's real height (set as --topbar-height
+   by Timeline's ResizeObserver) instead of a hardcoded guess, so it stays
+   flush under the topbar no matter how many lines that wraps to. 76px is
+   only the pre-measurement fallback for the first paint. */
+.day-label { position: sticky; top: var(--topbar-height, 76px); z-index: 1; width: fit-content; padding: 4px 8px; border-radius: 5px; background: #f6f7f4; box-shadow: 0 0 0 4px #f6f7f4; font-size: 12px; }
 .stop-card { min-height: 58px; padding: 10px 12px; border-color: #e7dfd4; box-shadow: none; transition: border-color .15s, box-shadow .15s; }
 .stop-card:hover { border-color: #d9b98c; box-shadow: 0 6px 16px rgba(12,20,33,.045); }
 .stop-icon { width: 32px; height: 32px; border-radius: 9px; }
@@ -432,7 +436,6 @@ body { overflow: hidden; }
   .trip-review-grid { grid-template-columns: 1fr; padding: 12px 16px 0; }
   .trip-review-card { margin: 12px 16px 0; }
   .timeline-scroll { padding: 14px 16px 28px; }
-  .day-label { top: 58px; }
   .chat-column { position: absolute; z-index: 1100; inset: auto 0 0; height: min(70dvh, 610px); display: flex; border: 1px solid var(--border); border-bottom: 0; border-radius: 18px 18px 0 0; box-shadow: 0 -14px 40px rgba(12,20,33,.16); transform: translateY(calc(100% + 4px)); transition: transform .24s ease; }
   .mobile-chat-open .chat-column { transform: translateY(0); }
   .mobile-chat-close { position: absolute; z-index: 2; top: 16px; right: 10px; display: block; border: 0; background: var(--muted); color: var(--muted-foreground); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }

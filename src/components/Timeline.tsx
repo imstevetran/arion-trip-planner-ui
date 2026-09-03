@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { callTool } from "../lib/webmcp/tools";
 import { t, type Locale } from "../lib/i18n";
 import { CarIcon, MapPinIcon, PlaneIcon, TriangleAlertIcon } from "./icons";
@@ -235,6 +235,28 @@ export function Timeline({
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+
+  // .day-label's sticky `top` used to be a hardcoded px guess at the sticky
+  // .app-topbar's height — it drifted out of sync on mobile (where the
+  // topbar wraps to more lines for a long destination name or when
+  // ShareItineraryButton/CalendarExportButton both render), so the date
+  // pill stuck partway *behind* the topbar instead of right below it.
+  // Measuring the real height keeps it correct regardless of content or
+  // viewport width.
+  const topbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = topbarRef.current;
+    if (!el) return;
+    // entry.contentRect excludes the topbar's own padding, undershooting the
+    // sticky offset .day-label actually needs (which is measured to the
+    // border box, like getBoundingClientRect) — read that directly instead.
+    const observer = new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--topbar-height", `${el.getBoundingClientRect().height}px`);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const days = trip.stops.reduce<Record<string, typeof trip.stops>>((groups, stop) => {
     const key = stop.planned_date ?? "unscheduled";
     (groups[key] ??= []).push(stop);
@@ -291,7 +313,7 @@ export function Timeline({
 
   return (
     <div className={embedded ? "timeline-main" : "app-main"}>
-      <div className="app-topbar">
+      <div className="app-topbar" ref={topbarRef}>
         <div>
           <p className="trip-title">{trip.trip.destination_query}</p>
           <p className="trip-sub">

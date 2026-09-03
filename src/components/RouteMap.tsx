@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -24,8 +24,13 @@ function markerIcon(sequence: number, selection: "origin" | "destination" | null
 
 function FitBounds({ points }: { points: Array<[number, number]> }) {
   const map = useMap();
+  const fittedPointsKey = useRef<string | null>(null);
   useEffect(() => {
     if (points.length === 0) return;
+    const pointsKey = points.map(([lat, lon]) => `${lat},${lon}`).join(";");
+    if (fittedPointsKey.current === pointsKey) return;
+    fittedPointsKey.current = pointsKey;
+
     if (points.length === 1) {
       map.setView(points[0], 11);
       return;

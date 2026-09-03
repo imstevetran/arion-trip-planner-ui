@@ -18,6 +18,10 @@ jobs:
       # committed in plaintext, since it must exactly match
       # trip-planner-api's FRONTEND_API_SECRET.
       VITE_TRIP_PLANNER_API_SECRET: ${{ secrets.VITE_TRIP_PLANNER_API_SECRET }}
+      # Also not a real secret (see src/lib/streetImagery.ts) — same
+      # reasoning as VITE_TRIP_PLANNER_API_SECRET above, stored as a repo
+      # secret rather than committed in plaintext.
+      VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

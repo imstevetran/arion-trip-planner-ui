@@ -9,6 +9,21 @@ function jsonResourceContent(uri: URL, data: unknown) {
 export function registerAllResources(): void {
   const server = getWebMcpServer();
 
+  // registerResource is an MCP-B extension beyond the base WebMCP spec
+  // (@mcp-b/global's own README is explicit about this) — a visiting
+  // browser that already defines a partial document.modelContext of its
+  // own (a native implementation, or another extension) before this app's
+  // script runs gets wrapped as-is rather than replaced, and may only
+  // implement the base spec. Confirmed live: that crashed app bootstrap
+  // entirely ("registerResource is not a function") for at least one real
+  // visitor. Resources are this app's own introspection surface, not
+  // required for the tools every actual booking action goes through, so
+  // degrading to "no resources" here beats taking the whole app down.
+  if (typeof server.registerResource !== "function") {
+    console.warn("[webmcp] registerResource unavailable on this document.modelContext — skipping resource registration.");
+    return;
+  }
+
   server.registerResource({
     uri: "trip://current",
     name: "Current trip",

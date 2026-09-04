@@ -1,7 +1,7 @@
 import type { InputSchema } from "@mcp-b/webmcp-types";
 import { getWebMcpServer } from "./server.js";
 import { apiPost } from "../api.js";
-import { getCurrentLocale, getCurrentTripId } from "./state.js";
+import { getCurrentLocale, getCurrentTripId, setCurrentTripId } from "./state.js";
 
 // Mirrors apps/trip-planner-api/src/webmcp/toolSchemas.ts — kept in sync by
 // hand since the two live in separate repos by design (see the design
@@ -174,6 +174,18 @@ export async function callTool<T = unknown>(
     locale: getCurrentLocale(),
     ...(turnstileToken ? { turnstileToken } : {}),
   });
+  // Our own UI only picks this up once App.tsx's tripId state round-trips
+  // through a render + effect (see state.ts) — fine for a human clicking
+  // through the form, but an external WebMCP client calling createTrip then
+  // immediately calling another tool (suggestRoute, say) via executeTool()
+  // can easily win that race, since nothing paces it to React's render
+  // cycle. Confirmed live: exactly that 400'd with "tripId is required."
+  // Updating the shared state synchronously here, the moment the response
+  // comes back, closes the gap regardless of which caller (ours or
+  // external) is driving.
+  if (name === "createTrip" && result && typeof result === "object" && "id" in result) {
+    setCurrentTripId((result as { id: string }).id);
+  }
   return result;
 }
 

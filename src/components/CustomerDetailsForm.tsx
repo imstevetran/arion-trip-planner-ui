@@ -23,9 +23,28 @@ export function CustomerDetailsForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Digits/+/spaces/hyphens/parens only, with at least 8 digits — Traveloka
+  // and the real vehicle-booking API both parse this as-is (see
+  // trip-planner-api's executeRealBooking), and unlike those, nothing here
+  // rejected a malformed value before saving it. Confirmed live: a stray
+  // letter in a saved phone number ("+84 78v5959v249") reached the real
+  // vehicle-booking API unchanged and got rejected there, permanently
+  // failing that booking with no indication why until this session's
+  // failure_reason logging existed to see it.
+  const PHONE_PATTERN = /^[0-9+\-\s()]+$/;
+
+  function phoneIsValid(value: string): boolean {
+    const digitCount = (value.match(/[0-9]/g) ?? []).length;
+    return PHONE_PATTERN.test(value) && digitCount >= 8;
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!fullName.trim() || !phone.trim()) return;
+    if (!phoneIsValid(phone.trim())) {
+      setError(t(locale, "customerDetailsPhoneInvalid"));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

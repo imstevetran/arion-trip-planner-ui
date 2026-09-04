@@ -139,6 +139,15 @@ export function ChatPanel({
   // budget of patience) rather than just once per turn.
   const [thinkingTier, setThinkingTier] = useState<0 | 1 | 2>(0);
   const [actionsUi, setActionsUi] = useState<Record<number, ActionsUiState>>({});
+  // Tracks locally whether the traveler-details card below was just
+  // submitted, independent of the `needsCustomerDetails` prop — that prop
+  // flips false the instant App.tsx's refresh() picks up the saved details,
+  // which unmounts the form with no trace it ever succeeded (confirmed
+  // live: customers reported nothing visibly happening after saving).
+  // Staying true here instead swaps the form for a confirmation + next-step
+  // hint, and this can't be a message in `messages` — the 4s history poll
+  // above replaces that array wholesale and would wipe an unpersisted one.
+  const [detailsSaved, setDetailsSaved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastHistoryLength = useRef(0);
   const requestInFlight = useRef(false);
@@ -327,10 +336,20 @@ export function ChatPanel({
             )}
           </div>
         ))}
-        {needsCustomerDetails && (
+        {(needsCustomerDetails || detailsSaved) && (
           <div className="msg assistant">
             <div className="bubble customer-details-card">
-              <CustomerDetailsForm locale={locale} onSaved={() => onCustomerDetailsSaved?.()} />
+              {detailsSaved ? (
+                <p className="customer-details-saved">✓ {t(locale, "customerDetailsSaved")}</p>
+              ) : (
+                <CustomerDetailsForm
+                  locale={locale}
+                  onSaved={() => {
+                    setDetailsSaved(true);
+                    onCustomerDetailsSaved?.();
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

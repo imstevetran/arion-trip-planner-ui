@@ -284,6 +284,11 @@ a { color: var(--primary); }
    repeating the form inline. */
 .customer-details-pending-hint { color: var(--primary); font-weight: 600; }
 
+/* Replaces the form in place once saved (ChatPanel's detailsSaved) — the
+   card must show a lasting confirmation, not just vanish, since saving
+   otherwise gave no visible sign anything happened. */
+.customer-details-saved { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--primary); }
+
 .timeline-scroll { padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
 .day-label { font-weight: 700; font-size: 13.5px; }

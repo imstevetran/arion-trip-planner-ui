@@ -370,6 +370,7 @@ export function RouteMap({
         loadingRoute: "Đang tìm tuyến đường bằng ORS…",
         routeFailed: "Không thể tìm tuyến đường",
         unavailableMode: "Chưa được bật trên ORS server",
+        onlyModesAvailable: (labels: string) => `Chỉ có ${labels} trên server này — các phương tiện khác chưa được bật.`,
         reverse: "Đổi chiều",
         clear: "Xóa chọn",
         geocoding: (count: number) => `Đang định vị ${count} điểm còn lại…`,
@@ -384,6 +385,7 @@ export function RouteMap({
         loadingRoute: "Finding a route with ORS…",
         routeFailed: "Could not find a route",
         unavailableMode: "Not enabled on the ORS server",
+        onlyModesAvailable: (labels: string) => `Only ${labels} available on this server — other travel modes aren't enabled.`,
         reverse: "Swap",
         clear: "Clear",
         geocoding: (count: number) => `Locating ${count} more ${count === 1 ? "stop" : "stops"}…`,
@@ -475,7 +477,16 @@ export function RouteMap({
                   ))}
                 </div>
               </details>
-              {supportedProfiles.length === 1 && <p className="map-route-profile-note">{copy.unavailableMode}</p>}
+              {supportedProfiles.length === 1 && (
+                <p className="map-route-profile-note">
+                  {copy.onlyModesAvailable(
+                    travelModes
+                      .filter((mode) => supportedProfiles.includes(mode.value))
+                      .map((mode) => mode.label)
+                      .join(", "),
+                  )}
+                </p>
+              )}
               {routeStatus === "loading" && <p className="map-route-status">{copy.loadingRoute}</p>}
               {routeStatus === "error" && <p className="map-route-error">{copy.routeFailed}: {routeError}</p>}
               {selectedRoute && <p className="map-directions-leg">ORS: {selectedRoute.distanceKm.toFixed(1)} km · {Math.round(selectedRoute.durationMinutes)} min</p>}

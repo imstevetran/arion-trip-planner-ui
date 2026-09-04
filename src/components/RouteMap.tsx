@@ -162,6 +162,7 @@ function StopMarker({
   selection,
   offset,
   isPreviewing,
+  focusToken,
   onSelect,
   onPopupClose,
 }: {
@@ -170,6 +171,10 @@ function StopMarker({
   selection: "origin" | "destination" | null;
   offset: [number, number];
   isPreviewing: boolean;
+  // Increments on every focus request, repeats included — isPreviewing
+  // alone doesn't change (so this effect wouldn't re-fire) when the
+  // already-focused stop is clicked again.
+  focusToken: number;
   onSelect: () => void;
   onPopupClose: () => void;
 }) {
@@ -196,7 +201,7 @@ function StopMarker({
     map.panTo([stop.latitude as number, stop.longitude as number]);
     markerRef.current?.openPopup();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewing]);
+  }, [isPreviewing, focusToken]);
 
   return (
     <Marker
@@ -239,9 +244,21 @@ export function RouteMap({
 }) {
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
   const [previewStopId, setPreviewStopId] = useState<string | null>(null);
+  // previewStopId alone can't drive StopMarker's pan-to-self effect: if the
+  // same stop is already previewed, setPreviewStopId(sameId) is a no-op (no
+  // state change, no re-render), so re-clicking a still-focused pin or
+  // Plan card silently did nothing. Confirmed live: repeat clicks
+  // "sometimes" didn't pan. This increments on *every* focus request
+  // (pin or Plan card, first click or repeat), giving StopMarker something
+  // that always changes to key its effect on alongside isPreviewing.
+  const [focusToken, setFocusToken] = useState(0);
+  function focusStop(stopId: string) {
+    setPreviewStopId(stopId);
+    setFocusToken((token) => token + 1);
+  }
 
   useEffect(() => {
-    if (stopToFocus) setPreviewStopId(stopToFocus.stopId);
+    if (stopToFocus) focusStop(stopToFocus.stopId);
     // Only the arrival of a *new* focus request should move the preview —
     // not every render where the same object is still the latest one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,7 +407,7 @@ export function RouteMap({
   const activeTravelMode = travelModes.find((mode) => mode.value === travelProfile)!;
 
   function toggleStop(stopId: string) {
-    setPreviewStopId(stopId);
+    focusStop(stopId);
     onStopClick?.(stopId);
     setSelectedStopIds((currentIds) => {
       const ids = currentIds.filter((id) => stops.some((stop) => stop.id === id));
@@ -422,6 +439,7 @@ export function RouteMap({
             selection={selectedStopIds[0] === stop.id ? "origin" : selectedStopIds[1] === stop.id ? "destination" : null}
             offset={markerOffsets.get(stop.id) ?? [0, 0]}
             isPreviewing={previewStopId === stop.id}
+            focusToken={focusToken}
             onSelect={() => toggleStop(stop.id)}
             onPopupClose={() => setPreviewStopId((current) => (current === stop.id ? null : current))}
           />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { callTool, registerAllTools } from "./lib/webmcp/tools";
 import { registerAllResources } from "./lib/webmcp/resources";
 import { setCurrentLocale, setCurrentTripId } from "./lib/webmcp/state";
@@ -73,11 +73,26 @@ export default function App() {
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
+  // Geocoding/route computation can take a while when ORS's quota is
+  // exhausted (a real, ongoing state this session — every stop falls back
+  // to a throttled Nominatim call). Confirmed live: a plain 6s setInterval
+  // with no in-flight guard fired a *new* /resources/trip/:id poll on top
+  // of one still pending once a single fetch started taking longer than
+  // 6s, and each new poll competes for the exact same rate-limited
+  // fallback path — a pileup that only gets worse over time and can look
+  // indistinguishable from the page being stuck loading forever, even
+  // though any one request in isolation does eventually resolve.
+  const refreshInFlight = useRef(false);
   const refresh = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       const [tripData, bookingsData, disruptionsData] = await Promise.all([
-        apiGet<TripResource>(`/resources/trip/${tripId}`),
+        // Geocoding-heavy trips can genuinely take a while server-side (see
+        // refreshInFlight's comment) — bounded so a rare truly-stuck
+        // request can't hold refreshInFlight true forever and silently
+        // block every later poll.
+        apiGet<TripResource>(`/resources/trip/${tripId}`, { timeoutMs: 45_000 }),
         isSharedView ? Promise.resolve({ bookings: [] }) : apiGet<{ bookings: TripBooking[] }>(`/resources/trip/${tripId}/bookings`),
         isSharedView ? Promise.resolve({ disruptions: [] }) : apiGet<{ disruptions: TripDisruption[] }>(`/resources/trip/${tripId}/disruptions`),
       ]);
@@ -86,6 +101,8 @@ export default function App() {
       setDisruptions(disruptionsData.disruptions);
     } catch {
       // transient — next refresh (poll or tool-triggered) will retry
+    } finally {
+      refreshInFlight.current = false;
     }
   }, [tripId, isSharedView]);
 

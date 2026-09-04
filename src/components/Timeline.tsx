@@ -210,6 +210,86 @@ function AccommodationOptions({
   );
 }
 
+const DIRECTION_LABEL: Record<TripFlightOption["direction"], { en: string; vi: string }> = {
+  departure: { en: "Outbound", vi: "Chuyến đi" },
+  return: { en: "Return", vi: "Chuyến về" },
+};
+
+// One picker per direction (outbound/return each have their own candidate
+// list) — mirrors AccommodationOptions' shape, just grouped. selectFlight
+// (trip-planner-api) resets *all* selections on every call and only
+// re-selects whatever traveloka_itinerary_ids it's given, so picking a new
+// outbound has to resubmit the still-selected return alongside it (and
+// vice versa) or that direction's selection gets silently wiped.
+function FlightOptions({
+  options,
+  locale,
+  bookings,
+  hasCustomerDetails,
+  readOnly,
+  onChanged,
+}: {
+  options: TripFlightOption[];
+  locale: Locale;
+  bookings: TripBooking[];
+  hasCustomerDetails: boolean;
+  readOnly: boolean;
+  onChanged: () => void;
+}) {
+  if (options.length === 0) return null;
+  const directions = Array.from(new Set(options.map((option) => option.direction)));
+
+  async function select(itineraryId: string, direction: TripFlightOption["direction"]) {
+    const keepFromOtherDirection = options.find(
+      (option) => option.direction !== direction && option.selected && option.traveloka_itinerary_id,
+    );
+    await callTool("selectFlight", {
+      itineraryIds: [itineraryId, ...(keepFromOtherDirection ? [keepFromOtherDirection.traveloka_itinerary_id] : [])],
+    });
+    onChanged();
+  }
+
+  return (
+    <>
+      {directions.map((direction) => {
+        const directionOptions = options.filter((option) => option.direction === direction);
+        const selected = directionOptions.find((option) => option.selected);
+        return (
+          <div key={direction} className="flight-direction">
+            <div className="section-title">{DIRECTION_LABEL[direction][locale]}</div>
+            <div className="option-list">
+              {directionOptions.map((option) => (
+                <div key={option.id} className={`option-row${option.selected ? " selected" : ""}`}>
+                  <span>
+                    <span className="flight-option-main">{option.carrier_name} {option.flight_number} · {formatVnd(option.price_vnd)}</span>
+                    <span className="mono stop-meta flight-option-times">
+                      {new Date(option.departure_time).toLocaleString()} → {new Date(option.arrival_time).toLocaleString()}
+                    </span>
+                  </span>
+                  {!option.selected && !readOnly && option.traveloka_itinerary_id && (
+                    <button type="button" onClick={() => select(option.traveloka_itinerary_id as string, direction)}>
+                      {t(locale, "approve") === "Approve" ? "Select" : "Chọn"}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {selected && !readOnly && (
+              <ApprovalRow
+                booking={bookingFor(bookings, "trip_flight_option_id", selected.id)}
+                kind="flight"
+                hasCustomerDetails={hasCustomerDetails}
+                locale={locale}
+                onChanged={onChanged}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 export function Timeline({
   trip,
   tripId,
@@ -244,7 +324,6 @@ export function Timeline({
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
   const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
-  const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
@@ -377,30 +456,19 @@ export function Timeline({
       {!readOnly && <BookingReview trip={trip} bookings={bookings} locale={locale} onChanged={onChanged} />}
 
       <div className="timeline-scroll">
-        {trip.trip.needs_flight && selectedFlights.length > 0 && (
+        {trip.trip.needs_flight && trip.flightOptions.length > 0 && (
           <div className="day-group">
             <div className="day-label">
               <PlaneIcon /> Flight
             </div>
-            {selectedFlights.map((option: TripFlightOption) => (
-              <div className="stop-card" key={option.id}>
-                <div className="stop-icon">
-                  <PlaneIcon />
-                </div>
-                <div className="stop-body">
-                  <div className="stop-top">
-                    <span className="stop-name">
-                      {option.carrier_name} {option.flight_number}
-                    </span>
-                    <span className="mono stop-meta">{formatVnd(option.price_vnd)}</span>
-                  </div>
-                  <div className="stop-meta mono">
-                    {new Date(option.departure_time).toLocaleString()} → {new Date(option.arrival_time).toLocaleString()}
-                  </div>
-                  {!readOnly && <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", option.id)} kind="flight" hasCustomerDetails={hasCustomerDetails} locale={locale} onChanged={onChanged} />}
-                </div>
-              </div>
-            ))}
+            <FlightOptions
+              options={trip.flightOptions}
+              locale={locale}
+              bookings={bookings}
+              hasCustomerDetails={hasCustomerDetails}
+              readOnly={readOnly}
+              onChanged={onChanged}
+            />
           </div>
         )}
 

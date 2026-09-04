@@ -321,6 +321,10 @@ a { color: var(--primary); }
 
 .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground); margin: 4px 0; }
 
+.flight-direction + .flight-direction { margin-top: 14px; }
+.flight-option-main, .flight-option-times { display: block; }
+.flight-option-times { margin-top: 2px; }
+
 /* ---------- chat ---------- */
 .chat-panel { display: flex; flex-direction: column; min-width: 0; background: var(--card); }
 .chat-head { padding: 18px 20px; border-bottom: 1px solid var(--border); }

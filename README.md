@@ -12,6 +12,28 @@ Search) and talks to the booking mocks. The only config this app needs is
 
 ## Why WebMCP
 
+Planning a trip today means bouncing between a maps tab, three booking sites,
+a spreadsheet, and a calendar — an AI assistant that could actually *do* any
+of that for you has historically meant screen-scraping a UI never built for
+it, brittle to every redesign. WebMCP fits this use case because Arion is
+already a UI a human clicks through (map, timeline, chat) — WebMCP exposes
+that exact same functionality as typed, discoverable tools instead of asking
+an agent to fake mouse clicks. The site describes its own capabilities; any
+WebMCP-aware agent gets first-class access without a scraper.
+
+**What this buys the two sides working together:** a human can plan
+conversationally in the chat panel, or by hand via the form and map — same as
+any travel app. An external WebMCP agent (ChatGPT, Claude, or any other
+WebMCP-capable client) can drive the *identical* trip by calling the same
+tools this app's own chat calls — create the trip, draft and refine the
+route, search flights/stays/vehicles, stage a booking — with no bespoke
+integration and no scraping. The one thing neither the built-in chat nor an
+external agent can do is press Approve: every real reservation is staged by
+whichever assistant is driving, then requires one human tap to actually book.
+That split — an agent free to plan and prepare, a human who alone commits
+money — is the whole point of registering these as WebMCP tools rather than
+just calling an internal API.
+
 Every action the chat (or a human, via the Approve/Reject buttons) can take
 is registered as a real [WebMCP](https://github.com/webmachinelearning/webmcp)
 tool via `document.modelContext.registerTool()` — using
@@ -81,3 +103,7 @@ frontend repository.
 - Visual identity (Inter, `#d89b54` primary, navy `#0c1421`, light-only)
   matches the main Arion app's real design system — see the design brief
   from the review phase for the token reference.
+
+## License
+
+[MIT](./LICENSE)

@@ -83,6 +83,12 @@ export default function App() {
   // indistinguishable from the page being stuck loading forever, even
   // though any one request in isolation does eventually resolve.
   const refreshInFlight = useRef(false);
+  // Mirrors `trip` synchronously, unlike the state variable itself — the
+  // adaptive-polling scheduler below reads this from inside a stable
+  // useEffect closure (deliberately not re-run on every `trip` update, see
+  // its own comment) that would otherwise only ever see whatever `trip`
+  // was at the moment that effect last ran.
+  const latestTripRef = useRef<TripResource | null>(null);
   const refresh = useCallback(async () => {
     if (!tripId || refreshInFlight.current) return;
     refreshInFlight.current = true;
@@ -97,6 +103,7 @@ export default function App() {
         isSharedView ? Promise.resolve({ disruptions: [] }) : apiGet<{ disruptions: TripDisruption[] }>(`/resources/trip/${tripId}/disruptions`),
       ]);
       setTrip(tripData);
+      latestTripRef.current = tripData;
       setBookings(bookingsData.bookings);
       setDisruptions(disruptionsData.disruptions);
     } catch {
@@ -106,13 +113,59 @@ export default function App() {
     }
   }, [tripId, isSharedView]);
 
+  // trip-planner-api's GET /resources/trip/:id now returns immediately and
+  // finishes geocoding/place-image/route work in the background (see
+  // resources.ts) — a real fix for the 45s+ responses that used to block
+  // on that work, but it means the response right after an action that
+  // triggers it (selecting a planning style, refining the route) can show
+  // stale data, with nothing to update it until the *next* poll. A flat 6s
+  // cadence made that feel like up to a 6s stall. Polling fast while there's
+  // visible unfinished work (an ungeocoded stop, or 2+ geocoded stops with
+  // no route yet) closes most of that gap; capped at MAX_FAST_POLLS so a
+  // trip whose route will never resolve (e.g. Phu Quoc's route exceeding
+  // the self-hosted ORS server's 100km limit — a real, permanent
+  // constraint, not "not finished yet") doesn't poll fast forever.
+  const FAST_POLL_MS = 1_500;
+  const NORMAL_POLL_MS = 6_000;
+  const MAX_FAST_POLLS = 10;
+  const fastPollsRemaining = useRef(MAX_FAST_POLLS);
+
   useEffect(() => {
     if (!tripId) return;
-    void refresh();
-    // Poll so a disruption's effect on trip_bookings/disruptions shows up
-    // even without an explicit tool call from this tab.
-    const interval = setInterval(() => void refresh(), 6000);
-    return () => clearInterval(interval);
+    fastPollsRemaining.current = MAX_FAST_POLLS;
+    let cancelled = false;
+    let timeoutId: number;
+
+    async function tick() {
+      await refresh();
+      if (cancelled) return;
+      timeoutId = window.setTimeout(() => void tick(), nextDelay());
+    }
+
+    function nextDelay(): number {
+      const current = latestTripRef.current;
+      const stillCatchingUp = current
+        ? current.stops.some((stop) => stop.latitude === null) ||
+          (current.stops.filter((stop) => stop.latitude !== null).length >= 2 && current.route === null)
+        : true; // no data yet — assume still settling
+      if (!stillCatchingUp) {
+        fastPollsRemaining.current = MAX_FAST_POLLS; // reset for the next action
+        return NORMAL_POLL_MS;
+      }
+      if (fastPollsRemaining.current <= 0) return NORMAL_POLL_MS;
+      fastPollsRemaining.current -= 1;
+      return FAST_POLL_MS;
+    }
+
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+    // No dependency on `trip` itself — nextDelay reads latestTripRef
+    // instead, precisely so this effect never has to re-run (and so never
+    // has to reset the fast-poll budget) just because a poll updated the
+    // trip state.
   }, [tripId, refresh]);
 
   // Google redirects back here after consent. Complete the original request

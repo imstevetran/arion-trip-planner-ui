@@ -29,6 +29,15 @@ export default function App() {
   const [mobileView, setMobileView] = useState<"plan" | "map">("plan");
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [desktopPlanOpen, setDesktopPlanOpen] = useState(true);
+  // Set (a fresh object each time) when a map pin is clicked — Timeline
+  // scrolls that stop card into view and highlights it briefly. A new
+  // object on every click, rather than just the stopId, means clicking the
+  // *same* pin twice in a row still re-triggers Timeline's effect (a plain
+  // stopId wouldn't change on the second click).
+  const [stopToHighlight, setStopToHighlight] = useState<{ stopId: string } | null>(null);
+  // The reverse direction — set when a Plan stop card is clicked, consumed
+  // by RouteMap to pan to and open that pin's popup.
+  const [stopToFocus, setStopToFocus] = useState<{ stopId: string } | null>(null);
 
   function leaveCurrentTrip() {
     localStorage.removeItem(TRIP_ID_STORAGE_KEY);
@@ -144,7 +153,16 @@ export default function App() {
         </svg>
       </button>}
       <div className="map-column">
-        <RouteMap trip={trip} locale={locale} />
+        <RouteMap
+          trip={trip}
+          locale={locale}
+          stopToFocus={stopToFocus}
+          onStopClick={(stopId) => {
+            setStopToHighlight({ stopId });
+            setMobileView("plan");
+            setDesktopPlanOpen(true);
+          }}
+        />
         <button type="button" className="desktop-plan-toggle" onClick={() => setDesktopPlanOpen((open) => !open)}>
           {desktopPlanOpen ? "Hide plan" : "Show plan"}
         </button>
@@ -152,7 +170,23 @@ export default function App() {
       {trip ? (
         <div className="app-main">
           {!isSharedView && (trip.trip.status === "draft" || trip.trip.status === "planning") ? <PlanOptions locale={locale} onChoose={openAssistantWithMessage} /> : null}
-          <Timeline trip={trip} tripId={tripId} bookings={bookings} disruptions={disruptions} fleet={fleet} locale={locale} onChanged={refresh} onAskAssistant={openAssistantWithMessage} embedded readOnly={isSharedView} />
+          <Timeline
+            trip={trip}
+            tripId={tripId}
+            bookings={bookings}
+            disruptions={disruptions}
+            fleet={fleet}
+            locale={locale}
+            onChanged={refresh}
+            onAskAssistant={openAssistantWithMessage}
+            embedded
+            readOnly={isSharedView}
+            stopToHighlight={stopToHighlight}
+            onStopClick={(stopId) => {
+              setStopToFocus({ stopId });
+              setMobileView("map");
+            }}
+          />
         </div>
       ) : (
         <div className="app-main">

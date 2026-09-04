@@ -221,6 +221,8 @@ export function Timeline({
   embedded = false,
   onAskAssistant,
   readOnly = false,
+  stopToHighlight,
+  onStopClick,
 }: {
   trip: TripResource;
   tripId: string;
@@ -232,12 +234,33 @@ export function Timeline({
   embedded?: boolean;
   onAskAssistant: (message: string) => void;
   readOnly?: boolean;
+  // The Map → Plan direction: App.tsx sets this (a fresh object each time)
+  // when a map pin is clicked — scrolls that stop's card into view and
+  // highlights it briefly.
+  stopToHighlight?: { stopId: string } | null;
+  // The reverse direction — called when a stop card is clicked, so App.tsx
+  // can tell RouteMap to pan to and open that pin.
+  onStopClick?: (stopId: string) => void;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
   const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
   const selectedFlights = trip.flightOptions.filter((option) => option.selected);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+  const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
+
+  // Scrolls the target stop card into view and flags it for a brief
+  // highlight animation (see .stop-card.highlighted in index.css), cleared
+  // after the animation's own duration so it doesn't linger as permanent
+  // "selected" state.
+  useEffect(() => {
+    if (!stopToHighlight) return;
+    const el = document.getElementById(`stop-${stopToHighlight.stopId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedStopId(stopToHighlight.stopId);
+    const clear = window.setTimeout(() => setHighlightedStopId(null), 2000);
+    return () => window.clearTimeout(clear);
+  }, [stopToHighlight]);
 
   // .day-label's sticky `top` used to be a hardcoded px guess at the sticky
   // .app-topbar's height — it drifted out of sync on mobile (where the
@@ -395,7 +418,11 @@ export function Timeline({
                       vehicleSlot={stop.id === firstDrivingLegStopId ? vehicleContent : undefined}
                     />
                   )}
-                  <div className="stop-card">
+                  <div
+                    id={`stop-${stop.id}`}
+                    className={`stop-card${highlightedStopId === stop.id ? " highlighted" : ""}${onStopClick ? " is-clickable" : ""}`}
+                    onClick={onStopClick ? () => onStopClick(stop.id) : undefined}
+                  >
                     <div className="stop-icon">
                       {stop.image_url ? (
                         <img className="stop-thumb" src={stop.image_url} alt="" loading="lazy" />

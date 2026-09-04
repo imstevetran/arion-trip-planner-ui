@@ -5,8 +5,6 @@ import L from "leaflet";
 import type { TripResource, TripStop } from "../types";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { StreetImageryResult } from "../lib/streetImagery";
-import { exploreUrl, fetchStreetImagery } from "../lib/streetImagery";
 import { fetchOrsProfiles, fetchOrsRoute, type OrsRoute, type OrsTravelProfile } from "../lib/openRouteService";
 
 // Own the map — not nested inside the timeline's scroll container (an
@@ -109,38 +107,15 @@ function ResizeMap() {
 // already be there, not appear only once stops are geocoded).
 const DEFAULT_CENTER: [number, number] = [16.05, 108.2];
 const DEFAULT_ZOOM = 5;
-// Street-level photos come from Google's Street View Static API - see
-// lib/streetImagery.ts for the free metadata probe that has to happen first.
-function useStreetImagery(latitude: number, longitude: number): { status: "loading" } | StreetImageryResult {
-  // Keyed by coordinate so switching stops reads as "loading" on the very
-  // first render, without an effect having to setState to get there.
-  const coordinateKey = `${latitude},${longitude}`;
-  const [loaded, setLoaded] = useState<{ key: string; result: StreetImageryResult } | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchStreetImagery(latitude, longitude, controller.signal)
-      .then((result) => setLoaded({ key: coordinateKey, result }))
-      // Only ever rejects on abort - a new stop or a closed panel, both of
-      // which have already replaced or unmounted this state.
-      .catch(() => {});
-    return () => controller.abort();
-  }, [coordinateKey, latitude, longitude]);
-
-  return loaded?.key === coordinateKey ? loaded.result : { status: "loading" };
-}
 
 // A compact thumbnail card that opens *on the marker* (a Leaflet popup),
-// rather than a panel docked to the corner of the map — clicking a pin
-// should show the photo right there, the way Google Maps does it. Clicking
-// the thumbnail opens that exact photo in Mapillary's interactive viewer.
-const COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-
-function compassLabel(heading: number): string {
-  return COMPASS_POINTS[Math.round(heading / 45) % 8];
-}
-
-function StreetViewPopupContent({
+// rather than a panel docked to the corner of the map. The photo is a
+// best-effort Wikipedia match (trip-planner-api's routing/wikimedia.ts,
+// cached on the stop as image_url/image_attribution — no API key, no
+// billing) — already present on `stop` from the trip resource poll, so
+// unlike the old Google Street View version this needs no separate fetch
+// or loading state at all.
+function StopPhotoPopupContent({
   stop,
   locale,
   onContentResize,
@@ -149,121 +124,34 @@ function StreetViewPopupContent({
   locale: Locale;
   onContentResize: () => void;
 }) {
-  const latitude = stop.latitude as number;
-  const longitude = stop.longitude as number;
-  const imagery = useStreetImagery(latitude, longitude);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [imageBroken, setImageBroken] = useState(false);
 
-  // react-leaflet re-measures a popup when its *children* prop changes, which
-  // covers mounting this card but not the async hop from skeleton to photos
-  // (that state lives in here, so RouteMap never re-renders). Without the
-  // nudge leaflet keeps the skeleton's height and the grown card can hang off
-  // the top of the map instead of auto-panning into view.
+  // react-leaflet re-measures a popup when its *children* prop changes,
+  // which covers mounting this card but not the img load itself — without
+  // the nudge leaflet can size the popup before the image's real aspect
+  // ratio is known.
   useEffect(() => {
     onContentResize();
-  }, [onContentResize, imagery.status, imageBroken]);
+  }, [onContentResize, imageBroken]);
 
   const copy = locale === "vi"
-    ? {
-        loading: "Đang tìm ảnh…",
-        empty: "Google chưa có ảnh Street View quanh điểm này.",
-        missingKey: "Chưa cấu hình VITE_GOOGLE_MAPS_API_KEY.",
-        failed: "Không tải được ảnh.",
-        imageFailed: "Google tứ chối ảnh này — kiểm tra giối hạn referrer của API key.",
-        open: "Mở Street View tương tác",
-        explore: "Xem quanh đây",
-        altPrefix: "Ảnh Street View gần ",
-        otherShots: "Hướng nhìn khác",
-        away: "cách điểm",
-      }
-    : {
-        loading: "Looking for photos…",
-        empty: "Google has no Street View coverage around this stop.",
-        missingKey: "VITE_GOOGLE_MAPS_API_KEY isn't configured.",
-        failed: "Couldn't load photos.",
-        imageFailed: "Google refused this image — check the API key's referrer restrictions.",
-        open: "Open interactive Street View",
-        explore: "Look around here",
-        altPrefix: "Street View near ",
-        otherShots: "Other directions",
-        away: "away",
-      };
+    ? { empty: "Chưa có ảnh cho điểm này.", imageFailed: "Không tải được ảnh này." }
+    : { empty: "No photo available for this stop yet.", imageFailed: "Couldn't load this image." };
 
-  if (imagery.status === "loading") {
+  if (!stop.image_url || imageBroken) {
     return (
       <div className="street-view-pop">
-        <div className="street-view-skeleton" />
-        <p>{copy.loading}</p>
+        <p>{imageBroken ? copy.imageFailed : copy.empty}</p>
       </div>
     );
   }
-
-  if (imagery.status !== "ok") {
-    const message =
-      imagery.status === "empty" ? copy.empty
-      : imagery.status === "missing-key" ? copy.missingKey
-      : `${copy.failed} ${imagery.message}`;
-    return (
-      <div className="street-view-pop">
-        <p>{message}</p>
-        <a className="street-view-explore" href={exploreUrl(latitude, longitude)} target="_blank" rel="noreferrer">
-          {copy.explore}
-        </a>
-      </div>
-    );
-  }
-
-  const active = imagery.images[Math.min(activeIndex, imagery.images.length - 1)];
 
   return (
     <div className="street-view-pop">
-      {imageBroken ? (
-        <p>{copy.imageFailed}</p>
-      ) : (
-        <a className="street-view-main" href={active.viewerUrl} target="_blank" rel="noreferrer" title={copy.open}>
-          <img
-            src={active.thumbUrl}
-            alt={`${copy.altPrefix}${stop.place_name}`}
-            // return_error_code=true means a real 404 rather than Google's
-            // grey placeholder, so this only fires on an actual problem.
-            onError={() => setImageBroken(true)}
-          />
-          <span className="street-view-look" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 12a8 8 0 0 1 13.5-5.8L20 8" />
-              <path d="M20 4v4h-4" />
-              <path d="M20 12a8 8 0 0 1-13.5 5.8L4 16" />
-              <path d="M4 20v-4h4" />
-            </svg>
-          </span>
-        </a>
-      )}
-
-      <p className="street-view-meta">
-        <span>{compassLabel(active.heading)}</span>
-        {imagery.distanceMeters >= 2 && <span>{Math.round(imagery.distanceMeters)} m {copy.away}</span>}
-        {imagery.capturedLabel !== null && <span>{imagery.capturedLabel}</span>}
-      </p>
-
-      {!imageBroken && imagery.images.length > 1 && (
-        <div className="street-view-thumbs" aria-label={copy.otherShots}>
-          {imagery.images.map((image, index) => (
-            <button
-              key={image.id}
-              type="button"
-              className={index === activeIndex ? "is-active" : undefined}
-              onClick={() => setActiveIndex(index)}
-              aria-label={`${copy.altPrefix}${stop.place_name} - ${compassLabel(image.heading)}`}
-              aria-pressed={index === activeIndex}
-            >
-              {/* Same four URLs as the big view, so the strip is served from
-                  cache and costs no extra billed requests. */}
-              <img src={image.thumbUrl} alt="" />
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="street-view-main">
+        <img src={stop.image_url} alt={stop.place_name} onError={() => setImageBroken(true)} />
+      </div>
+      {stop.image_attribution && <p className="street-view-meta">{stop.image_attribution}</p>}
     </div>
   );
 }
@@ -286,6 +174,8 @@ function StopMarker({
   onPopupClose: () => void;
 }) {
   const popupRef = useRef<L.Popup | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const map = useMap();
   const icon = useMemo(() => markerIcon(stop.sequence, selection, offset), [offset, selection, stop.sequence]);
   const updatePopup = useCallback(() => {
     const popup = popupRef.current;
@@ -295,8 +185,22 @@ function StopMarker({
     if (popup?.isOpen()) popup.update();
   }, []);
 
+  // Fires both for a direct pin click and for RouteMap setting
+  // previewStopId from a Plan-column click (App.tsx's stopToFocus) — either
+  // way, this stop becoming the previewed one should pan it into view.
+  // openPopup() is a harmless no-op on the direct-click path (Leaflet
+  // already opens a marker's bound popup on click); it's the whole point on
+  // the Plan → Map path, where nothing was actually clicked on the map.
+  useEffect(() => {
+    if (!isPreviewing) return;
+    map.panTo([stop.latitude as number, stop.longitude as number]);
+    markerRef.current?.openPopup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewing]);
+
   return (
     <Marker
+      ref={markerRef}
       position={[stop.latitude as number, stop.longitude as number]}
       icon={icon}
       eventHandlers={{ click: onSelect, popupclose: onPopupClose }}
@@ -310,15 +214,38 @@ function StopMarker({
         {/* Mounted only for the open pin — react-leaflet renders popup
             children eagerly, and a Mapillary lookup per stop on every map
             render is exactly what we don't want. */}
-        {isPreviewing && <StreetViewPopupContent stop={stop} locale={locale} onContentResize={updatePopup} />}
+        {isPreviewing && <StopPhotoPopupContent stop={stop} locale={locale} onContentResize={updatePopup} />}
       </Popup>
     </Marker>
   );
 }
 
-export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: Locale }) {
+export function RouteMap({
+  trip,
+  locale,
+  onStopClick,
+  stopToFocus,
+}: {
+  trip: TripResource | null;
+  locale: Locale;
+  // Lets App.tsx scroll the matching stop card into view in the Plan
+  // column and highlight it — clicking a pin should point at "this is
+  // where that is in your itinerary," not just open the photo popup.
+  onStopClick?: (stopId: string) => void;
+  // The Plan → Map direction: App.tsx sets this (a fresh object each time,
+  // so clicking the same Plan item twice in a row still re-triggers it)
+  // when a stop card is clicked there.
+  stopToFocus?: { stopId: string } | null;
+}) {
   const [selectedStopIds, setSelectedStopIds] = useState<string[]>([]);
   const [previewStopId, setPreviewStopId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (stopToFocus) setPreviewStopId(stopToFocus.stopId);
+    // Only the arrival of a *new* focus request should move the preview —
+    // not every render where the same object is still the latest one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopToFocus]);
   const [travelProfile, setTravelProfile] = useState<OrsTravelProfile>("driving-car");
   const [selectedRoute, setSelectedRoute] = useState<OrsRoute | null>(null);
   const [routeStatus, setRouteStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -464,6 +391,7 @@ export function RouteMap({ trip, locale }: { trip: TripResource | null; locale: 
 
   function toggleStop(stopId: string) {
     setPreviewStopId(stopId);
+    onStopClick?.(stopId);
     setSelectedStopIds((currentIds) => {
       const ids = currentIds.filter((id) => stops.some((stop) => stop.id === id));
       if (ids.includes(stopId)) return ids.filter((id) => id !== stopId);

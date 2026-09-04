@@ -69,56 +69,26 @@ function bookingFor(bookings: TripBooking[], key: keyof TripBooking, id: string)
 // this gate.
 export const KINDS_REQUIRING_CUSTOMER_DETAILS: TripBookingKind[] = ["vehicle", "flight"];
 
-function ApprovalRow({
-  booking,
-  kind,
-  hasCustomerDetails,
-  locale,
-  onChanged,
-}: {
-  booking: TripBooking | undefined;
-  kind: TripBookingKind;
-  hasCustomerDetails: boolean;
-  locale: Locale;
-  onChanged: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
+// Status-only now — approving/rejecting/retrying all happen in the chat
+// panel's PendingApprovals card (see ChatPanel.tsx), which is the only
+// place that has room to show a failure reason and a retry action without
+// making every pending booking card in the plan bulky. This just tells the
+// customer where to look and, for a failed booking, why.
+function ApprovalRow({ booking, locale }: { booking: TripBooking | undefined; locale: Locale }) {
   if (!booking) return null;
-
-  async function act(action: "approveBooking" | "rejectBooking") {
-    if (!booking) return;
-    setBusy(true);
-    try {
-      await callTool(action, { tripBookingId: booking.id });
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (booking.status === "booked") return <span className="status-pill booked">{t(locale, "booked")}</span>;
   if (booking.status === "rejected") return <span className="status-pill warn">{t(locale, "rejected")}</span>;
-  if (booking.status === "failed") return <span className="status-pill warn">{t(locale, "failed")}</span>;
+  if (booking.status === "failed") {
+    return (
+      <p className="stop-meta customer-details-pending-hint booking-failed-hint">
+        <span className="status-pill warn">{t(locale, "failed")}</span> {t(locale, "bookingReviewInChatHint")}
+      </p>
+    );
+  }
   if (booking.status !== "pending_approval" && booking.status !== "approved") return null;
 
-  // The actual name/phone/DOB form now lives in the chat panel (a card ChatPanel
-  // shows whenever this same condition is true — see App.tsx's
-  // needsCustomerDetails) rather than inline here, which used to make every
-  // pending booking card bulky with a 4-field form. This is just a pointer.
-  if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(kind) && !hasCustomerDetails) {
-    return <p className="stop-meta customer-details-pending-hint">{t(locale, "customerDetailsInChatHint")}</p>;
-  }
-
-  return (
-    <div className="stop-actions">
-      <button className="btn approve" disabled={busy} onClick={() => act("approveBooking")}>
-        {t(locale, "approve")}
-      </button>
-      <button className="btn reject" disabled={busy} onClick={() => act("rejectBooking")}>
-        {t(locale, "reject")}
-      </button>
-    </div>
-  );
+  return <p className="stop-meta customer-details-pending-hint">{t(locale, "bookingReviewInChatHint")}</p>;
 }
 
 // No ApprovalRow here, unlike AccommodationOptions — picking a vehicle
@@ -205,7 +175,7 @@ function AccommodationOptions({
           )}
         </div>
       ))}
-      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} kind="accommodation" hasCustomerDetails locale={locale} onChanged={onChanged} />}
+      {selected && <ApprovalRow booking={bookingFor(bookings, "trip_accommodation_option_id", selected.id)} locale={locale} />}
     </div>
   );
 }
@@ -225,14 +195,12 @@ function FlightOptions({
   options,
   locale,
   bookings,
-  hasCustomerDetails,
   readOnly,
   onChanged,
 }: {
   options: TripFlightOption[];
   locale: Locale;
   bookings: TripBooking[];
-  hasCustomerDetails: boolean;
   readOnly: boolean;
   onChanged: () => void;
 }) {
@@ -275,13 +243,7 @@ function FlightOptions({
               ))}
             </div>
             {selected && !readOnly && (
-              <ApprovalRow
-                booking={bookingFor(bookings, "trip_flight_option_id", selected.id)}
-                kind="flight"
-                hasCustomerDetails={hasCustomerDetails}
-                locale={locale}
-                onChanged={onChanged}
-              />
+              <ApprovalRow booking={bookingFor(bookings, "trip_flight_option_id", selected.id)} locale={locale} />
             )}
           </div>
         );
@@ -323,7 +285,6 @@ export function Timeline({
   onStopClick?: (stopId: string) => void;
 }) {
   const activeDisruption = disruptions.find((disruption) => !disruption.acknowledged_at);
-  const hasCustomerDetails = Boolean(trip.trip.customer_full_name && trip.trip.customer_phone);
   const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment?.vehicle_id);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [highlightedStopId, setHighlightedStopId] = useState<string | null>(null);
@@ -396,13 +357,7 @@ export function Timeline({
       {trip.vehicleAssignment.estimated_extra_km_charge_vnd > 0 && (
         <div className="stop-meta">+{formatVnd(trip.vehicleAssignment.estimated_extra_km_charge_vnd)} extra-km</div>
       )}
-      {!readOnly && <ApprovalRow
-        booking={vehicleBooking}
-        kind="vehicle"
-        hasCustomerDetails={hasCustomerDetails}
-        locale={locale}
-        onChanged={onChanged}
-      />}
+      {!readOnly && <ApprovalRow booking={vehicleBooking} locale={locale} />}
     </div>
   ) : trip.vehicleOptions.length > 0 && !readOnly ? (
     <VehicleOptions
@@ -465,7 +420,6 @@ export function Timeline({
               options={trip.flightOptions}
               locale={locale}
               bookings={bookings}
-              hasCustomerDetails={hasCustomerDetails}
               readOnly={readOnly}
               onChanged={onChanged}
             />

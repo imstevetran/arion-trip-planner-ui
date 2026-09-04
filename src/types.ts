@@ -105,6 +105,7 @@ export type TripBooking = {
   trip_accommodation_option_id: string | null;
   trip_vehicle_assignment_id: string | null;
   external_reference: string | null;
+  failure_reason: string | null;
 };
 
 export type TripDisruption = {

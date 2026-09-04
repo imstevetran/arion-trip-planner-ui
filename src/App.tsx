@@ -276,6 +276,10 @@ export default function App() {
           onCloseTrip={leaveCurrentTrip}
           needsCustomerDetails={needsCustomerDetails}
           onCustomerDetailsSaved={() => void refresh()}
+          trip={trip}
+          bookings={bookings}
+          fleet={fleet}
+          onBookingsChanged={() => void refresh()}
         />
       </div>}
     </div>

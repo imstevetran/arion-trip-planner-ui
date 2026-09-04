@@ -289,6 +289,24 @@ a { color: var(--primary); }
    otherwise gave no visible sign anything happened. */
 .customer-details-saved { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--primary); }
 
+/* Timeline's ApprovalRow, failed state — a status pill plus the same
+   "review in chat" pointer as the pending case, so the customer knows
+   there's a reason to read, not just that something broke. */
+.booking-failed-hint { display: flex; align-items: center; gap: 6px; }
+
+/* ChatPanel's PendingApprovals — approve/reject/retry now live here
+   instead of the Plan column (Timeline just points here). Reuses
+   customer-details-card's transparent-bubble treatment so multiple stacked
+   booking rows don't nest inside a second bubble border. */
+.bubble.pending-approvals-card { background: transparent; border: none; padding: 0; }
+.pending-approval-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 8px; padding: 9px 11px; border: 1px dashed var(--primary); border-radius: 8px;
+  background: var(--secondary); font-size: 12.5px;
+}
+.pending-approval-main { display: flex; flex-direction: column; gap: 3px; }
+.pending-approval-row .stop-actions { margin-top: 0; flex-shrink: 0; }
+
 .timeline-scroll { padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
 .day-label { font-weight: 700; font-size: 13.5px; }

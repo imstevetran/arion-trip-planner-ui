@@ -2,9 +2,129 @@ import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPostStream } from "../lib/api";
 import { STRINGS, t, type Locale } from "../lib/i18n";
 import { renderInline, renderMarkdown } from "../lib/markdown";
+import { callTool } from "../lib/webmcp/tools";
 import { SendIcon } from "./icons";
 import { CustomerDetailsForm } from "./CustomerDetailsForm";
-import type { ChatMessage, SuggestedAction } from "../types";
+import { KINDS_REQUIRING_CUSTOMER_DETAILS } from "./Timeline";
+import type { ChatMessage, FleetVehicle, SuggestedAction, TripBooking, TripResource } from "../types";
+
+function formatVnd(amount: number): string {
+  return new Intl.NumberFormat("vi-VN").format(amount) + " ₫";
+}
+
+type ApprovalItem = { booking: TripBooking; label: string; priceVnd: number | null };
+
+// Approving/rejecting/retrying a booking used to live in the Timeline
+// (Plan) column via ApprovalRow — moved here so it's next to where the
+// customer is already looking after a chat turn, instead of a separate
+// column they had no reason to check. Timeline still shows a status pill
+// and a "review in chat" pointer (see its own ApprovalRow).
+function pendingApprovalItems(
+  trip: TripResource,
+  bookings: TripBooking[],
+  fleet: FleetVehicle[],
+  hasCustomerDetails: boolean,
+): ApprovalItem[] {
+  const items: ApprovalItem[] = [];
+  for (const booking of bookings) {
+    if (booking.status !== "pending_approval" && booking.status !== "approved" && booking.status !== "failed") {
+      continue;
+    }
+    // Same gate ApprovalRow used to apply — the customer-details card above
+    // handles this case instead until it's resolved.
+    if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(booking.kind) && !hasCustomerDetails) continue;
+
+    if (booking.kind === "flight") {
+      const option = trip.flightOptions.find((candidate) => candidate.id === booking.trip_flight_option_id);
+      if (!option) continue;
+      items.push({ booking, label: `${option.carrier_name} ${option.flight_number}`, priceVnd: option.price_vnd });
+    } else if (booking.kind === "accommodation") {
+      const option = trip.accommodationOptions.find(
+        (candidate) => candidate.id === booking.trip_accommodation_option_id,
+      );
+      if (!option) continue;
+      items.push({ booking, label: option.name, priceVnd: option.price_vnd_per_night });
+    } else if (booking.kind === "vehicle") {
+      if (!trip.vehicleAssignment || trip.vehicleAssignment.id !== booking.trip_vehicle_assignment_id) continue;
+      const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment!.vehicle_id);
+      items.push({
+        booking,
+        label: vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehicle",
+        priceVnd: trip.vehicleAssignment.estimated_daily_rate_vnd,
+      });
+    }
+  }
+  return items;
+}
+
+function PendingApprovals({
+  trip,
+  bookings,
+  fleet,
+  hasCustomerDetails,
+  locale,
+  onChanged,
+}: {
+  trip: TripResource;
+  bookings: TripBooking[];
+  fleet: FleetVehicle[];
+  hasCustomerDetails: boolean;
+  locale: Locale;
+  onChanged: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const items = pendingApprovalItems(trip, bookings, fleet, hasCustomerDetails);
+  if (items.length === 0) return null;
+
+  async function act(bookingId: string, action: "approveBooking" | "rejectBooking") {
+    setBusyId(bookingId);
+    try {
+      await callTool(action, { tripBookingId: bookingId });
+      onChanged();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="msg assistant">
+      <div className="bubble pending-approvals-card">
+        <div className="customer-details-title">{t(locale, "pendingApprovalsTitle")}</div>
+        {items.map(({ booking, label, priceVnd }) => (
+          <div key={booking.id} className="pending-approval-row">
+            <div className="pending-approval-main">
+              <span>
+                {label}
+                {priceVnd !== null ? ` · ${formatVnd(priceVnd)}` : ""}
+              </span>
+              {booking.status === "failed" && (
+                <p className="customer-details-error">{booking.failure_reason ?? t(locale, "bookingFailedGeneric")}</p>
+              )}
+            </div>
+            <div className="stop-actions">
+              <button
+                type="button"
+                className="btn approve"
+                disabled={busyId === booking.id}
+                onClick={() => act(booking.id, "approveBooking")}
+              >
+                {booking.status === "failed" ? t(locale, "retry") : t(locale, "approve")}
+              </button>
+              <button
+                type="button"
+                className="btn reject"
+                disabled={busyId === booking.id}
+                onClick={() => act(booking.id, "rejectBooking")}
+              >
+                {t(locale, "reject")}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type ChatTurnResponse = {
   reply: string;
@@ -98,6 +218,10 @@ export function ChatPanel({
   getTurnstileToken,
   needsCustomerDetails = false,
   onCustomerDetailsSaved,
+  trip,
+  bookings,
+  fleet,
+  onBookingsChanged,
 }: {
   tripId: string | null;
   locale: Locale;
@@ -121,6 +245,14 @@ export function ChatPanel({
   // trip state, not something any one chat turn produced.
   needsCustomerDetails?: boolean;
   onCustomerDetailsSaved?: () => void;
+  // Same trip/bookings/fleet state Timeline renders from — needed here too
+  // now that approving/rejecting a booking happens in this panel. Omitted
+  // (and PendingApprovals stays hidden) for the pre-trip instance and the
+  // shared/read-only view, neither of which has anything to approve.
+  trip?: TripResource | null;
+  bookings?: TripBooking[];
+  fleet?: FleetVehicle[];
+  onBookingsChanged?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -352,6 +484,16 @@ export function ChatPanel({
               )}
             </div>
           </div>
+        )}
+        {trip && bookings && (
+          <PendingApprovals
+            trip={trip}
+            bookings={bookings}
+            fleet={fleet ?? []}
+            hasCustomerDetails={Boolean(trip.trip.customer_full_name && trip.trip.customer_phone)}
+            locale={locale}
+            onChanged={() => onBookingsChanged?.()}
+          />
         )}
         {busy && (
           <div className="msg assistant">

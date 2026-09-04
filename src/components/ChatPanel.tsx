@@ -12,7 +12,17 @@ function formatVnd(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(amount) + " ₫";
 }
 
-type ApprovalItem = { booking: TripBooking; label: string; priceVnd: number | null };
+type ApprovalItem = { booking: TripBooking; label: string; priceVnd: number | null; blocked: boolean };
+
+// DOM anchors for the scroll-to links between the two cards below — the
+// customer-details card points down to this once saved, and a blocked
+// approval row points back up to it.
+const CUSTOMER_DETAILS_CARD_ID = "customer-details-card";
+const PENDING_APPROVALS_CARD_ID = "pending-approvals-card";
+
+function scrollToCard(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
 
 // Approving/rejecting/retrying a booking used to live in the Timeline
 // (Plan) column via ApprovalRow — moved here so it's next to where the
@@ -30,20 +40,27 @@ function pendingApprovalItems(
     if (booking.status !== "pending_approval" && booking.status !== "approved" && booking.status !== "failed") {
       continue;
     }
-    // Same gate ApprovalRow used to apply — the customer-details card above
-    // handles this case instead until it's resolved.
-    if (KINDS_REQUIRING_CUSTOMER_DETAILS.includes(booking.kind) && !hasCustomerDetails) continue;
+    // Stays visible (unlike before) even while blocked on customer details
+    // — hiding it entirely left no link back to the details card above it
+    // once the customer scrolled past. approveBooking itself still refuses
+    // this server-side regardless of what the button here does.
+    const blocked = KINDS_REQUIRING_CUSTOMER_DETAILS.includes(booking.kind) && !hasCustomerDetails;
 
     if (booking.kind === "flight") {
       const option = trip.flightOptions.find((candidate) => candidate.id === booking.trip_flight_option_id);
       if (!option) continue;
-      items.push({ booking, label: `${option.carrier_name} ${option.flight_number}`, priceVnd: option.price_vnd });
+      items.push({
+        booking,
+        label: `${option.carrier_name} ${option.flight_number}`,
+        priceVnd: option.price_vnd,
+        blocked,
+      });
     } else if (booking.kind === "accommodation") {
       const option = trip.accommodationOptions.find(
         (candidate) => candidate.id === booking.trip_accommodation_option_id,
       );
       if (!option) continue;
-      items.push({ booking, label: option.name, priceVnd: option.price_vnd_per_night });
+      items.push({ booking, label: option.name, priceVnd: option.price_vnd_per_night, blocked });
     } else if (booking.kind === "vehicle") {
       if (!trip.vehicleAssignment || trip.vehicleAssignment.id !== booking.trip_vehicle_assignment_id) continue;
       const vehicle = fleet.find((candidate) => candidate.id === trip.vehicleAssignment!.vehicle_id);
@@ -51,6 +68,7 @@ function pendingApprovalItems(
         booking,
         label: vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehicle",
         priceVnd: trip.vehicleAssignment.estimated_daily_rate_vnd,
+        blocked,
       });
     }
   }
@@ -87,38 +105,49 @@ function PendingApprovals({
   }
 
   return (
-    <div className="msg assistant">
+    <div className="msg assistant" id={PENDING_APPROVALS_CARD_ID}>
       <div className="bubble pending-approvals-card">
         <div className="customer-details-title">{t(locale, "pendingApprovalsTitle")}</div>
-        {items.map(({ booking, label, priceVnd }) => (
+        {items.map(({ booking, label, priceVnd, blocked }) => (
           <div key={booking.id} className="pending-approval-row">
             <div className="pending-approval-main">
               <span>
                 {label}
                 {priceVnd !== null ? ` · ${formatVnd(priceVnd)}` : ""}
               </span>
-              {booking.status === "failed" && (
+              {blocked && <p className="customer-details-pending-hint">{t(locale, "customerDetailsInChatHint")}</p>}
+              {!blocked && booking.status === "failed" && (
                 <p className="customer-details-error">{booking.failure_reason ?? t(locale, "bookingFailedGeneric")}</p>
               )}
             </div>
-            <div className="stop-actions">
+            {blocked ? (
               <button
                 type="button"
-                className="btn approve"
-                disabled={busyId === booking.id}
-                onClick={() => act(booking.id, "approveBooking")}
+                className="link-btn"
+                onClick={() => scrollToCard(CUSTOMER_DETAILS_CARD_ID)}
               >
-                {booking.status === "failed" ? t(locale, "retry") : t(locale, "approve")}
+                {t(locale, "customerDetailsFillAboveHint")}
               </button>
-              <button
-                type="button"
-                className="btn reject"
-                disabled={busyId === booking.id}
-                onClick={() => act(booking.id, "rejectBooking")}
-              >
-                {t(locale, "reject")}
-              </button>
-            </div>
+            ) : (
+              <div className="stop-actions">
+                <button
+                  type="button"
+                  className="btn approve"
+                  disabled={busyId === booking.id}
+                  onClick={() => act(booking.id, "approveBooking")}
+                >
+                  {booking.status === "failed" ? t(locale, "retry") : t(locale, "approve")}
+                </button>
+                <button
+                  type="button"
+                  className="btn reject"
+                  disabled={busyId === booking.id}
+                  onClick={() => act(booking.id, "rejectBooking")}
+                >
+                  {t(locale, "reject")}
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -469,10 +498,19 @@ export function ChatPanel({
           </div>
         ))}
         {(needsCustomerDetails || detailsSaved) && (
-          <div className="msg assistant">
+          <div className="msg assistant" id={CUSTOMER_DETAILS_CARD_ID}>
             <div className="bubble customer-details-card">
               {detailsSaved ? (
-                <p className="customer-details-saved">✓ {t(locale, "customerDetailsSaved")}</p>
+                <>
+                  <p className="customer-details-saved">✓ {t(locale, "customerDetailsSaved")}</p>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => scrollToCard(PENDING_APPROVALS_CARD_ID)}
+                  >
+                    {t(locale, "reviewPendingBookingHint")}
+                  </button>
+                </>
               ) : (
                 <CustomerDetailsForm
                   locale={locale}

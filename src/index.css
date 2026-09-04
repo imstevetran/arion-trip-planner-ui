@@ -306,6 +306,7 @@ a { color: var(--primary); }
 }
 .pending-approval-main { display: flex; flex-direction: column; gap: 3px; }
 .pending-approval-row .stop-actions { margin-top: 0; flex-shrink: 0; }
+.pending-approval-row .link-btn { flex-shrink: 0; }
 
 .timeline-scroll { padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
